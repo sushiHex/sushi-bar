@@ -1,41 +1,44 @@
 #!/usr/bin/env python
-"""snip.py - draw-box crop a screenshot and stage it for Claude Code (Windows).
+"""snip.py - screenshot capture for Claude Code (native Windows).
 
-ALWAYS opens a draw-a-box region selector (full virtual desktop, multi-monitor,
-DPI-correct), captures exactly the rectangle you drag, saves it to a PNG, and by
-default copies the IMAGE to the clipboard so you can press Alt+V in Claude Code
-to stage it as [Image #N] (repeat to attach several images, then type text and
-send them together). Optionally copies the path instead, or launches `claude`.
+Modes (--mode):
+  box        draw a rectangle and capture it (default)
+  screen     capture the monitor under the cursor (--all = every monitor)
+  window     click a window to capture just that window
+  clipboard  load an image already on the clipboard (no capture)
 
-The selection is drawn by this script (stdlib tkinter overlay), so it does NOT
-depend on the OS Snipping-Tool's last-used mode - it is always a rectangular
-draw-box.
+--delay N waits N seconds before capturing (box/screen/window) - handy for
+opening a menu/tooltip first. By default the captured PNG is copied to the
+clipboard so you can press Alt+V to stage it as [Image #N]; --copy-path copies
+the path instead, --print-path prints only the path (for the /snip commands),
+--launch starts a new `claude` with it.
 
 Requires Pillow:  python -m pip install pillow
 
 Examples:
-  python snip.py                  # draw box -> image on clipboard -> Alt+V stages [Image #N]
-  python snip.py --copy-path      # draw box -> copy the file PATH instead (for @path)
-  python snip.py --launch         # draw box -> start a NEW `claude` with the image
-  python snip.py --out C:/x.png   # custom output path
+  python snip.py                          # draw box -> image on clipboard -> Alt+V
+  python snip.py --mode screen --delay 3  # 3s, then grab the screen under the cursor
+  python snip.py --mode window --print-path
 """
 from __future__ import annotations
 
 import argparse
 import ctypes
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import time
+from ctypes import c_void_p, wintypes
 from pathlib import Path
 
-MIN_DRAG_PX = 3             # ignore accidental clicks / near-zero drags
-SELECT_TIMEOUT_MS = 60_000  # auto-cancel the overlay if left idle this long (avoid a hang)
+MIN_DRAG_PX = 3             # ignore accidental clicks / near-zero drags/windows
+SELECT_TIMEOUT_MS = 60_000  # auto-cancel an overlay if left idle this long
 
 
 def _set_dpi_aware() -> None:
-    """Per-monitor DPI awareness so selector coords match physical screen pixels."""
+    """Per-monitor DPI awareness so coords match physical screen pixels."""
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PER_MONITOR_AWARE_V2
     except Exception:
@@ -52,28 +55,30 @@ def _virtual_screen() -> tuple[int, int, int, int]:
             u.GetSystemMetrics(78), u.GetSystemMetrics(79))   # SM_CX/CY_VIRTUALSCREEN
 
 
-def select_region() -> tuple[int, int, int, int] | None:
-    """Draw-box overlay; return absolute (x1, y1, x2, y2) or None if cancelled."""
+def _overlay(alpha: float, hint: str):
+    """A full-virtual-desktop transparent tk overlay. Returns (root, canvas, vx, vy)."""
     import tkinter as tk
 
     _set_dpi_aware()
     vx, vy, vw, vh = _virtual_screen()
-
     root = tk.Tk()
     root.overrideredirect(True)
     # "+{vx}+{vy}" is intentional: a negative origin renders as "+-1920", which Tk
-    # reads as -1920 from the LEFT. Do NOT "simplify" to f"{vx:+d}" - "-1920" means
-    # "from the right" in Tk geometry and would mis-place the overlay on a left/top monitor.
+    # reads as -1920 from the LEFT. Do NOT switch to f"{vx:+d}" - "-1920" means
+    # "from the right" and would mis-place the overlay on a left/top monitor.
     root.geometry(f"{vw}x{vh}+{vx}+{vy}")
     root.attributes("-topmost", True)
-    root.attributes("-alpha", 0.3)
+    root.attributes("-alpha", alpha)
     root.configure(bg="black", cursor="crosshair")
-
     canvas = tk.Canvas(root, bg="black", highlightthickness=0)
     canvas.pack(fill="both", expand=True)
-    canvas.create_text(vw // 2, 24, fill="white",
-                       text="Drag to select  ·  Esc to cancel", font=("Segoe UI", 12))
+    canvas.create_text(vw // 2, 24, fill="white", text=hint, font=("Segoe UI", 12))
+    return root, canvas, vx, vy
 
+
+def select_region() -> tuple[int, int, int, int] | None:
+    """Draw-box overlay; return absolute (x1, y1, x2, y2) or None if cancelled."""
+    root, canvas, vx, vy = _overlay(0.3, "Drag to select  ·  Esc to cancel")
     st: dict = {"x0": 0, "y0": 0, "rect": None, "bbox": None}
 
     def press(e):
@@ -100,6 +105,74 @@ def select_region() -> tuple[int, int, int, int] | None:
     root.focus_force()
     root.mainloop()
     return st["bbox"]
+
+
+def click_point() -> tuple[int, int] | None:
+    """Single-click overlay (for window mode); return absolute (x, y) or None."""
+    root, _canvas, vx, vy = _overlay(0.25, "Click a window to capture it  ·  Esc to cancel")
+    st: dict = {"pt": None}
+
+    def click(e):
+        st["pt"] = (e.x + vx, e.y + vy)
+        root.withdraw()
+        root.update_idletasks()
+        root.destroy()
+
+    root.bind("<Button-1>", click)
+    root.bind("<Escape>", lambda e: root.destroy())
+    root.after(SELECT_TIMEOUT_MS, root.destroy)
+    root.focus_force()
+    root.mainloop()
+    return st["pt"]
+
+
+def monitor_rect_under_cursor() -> tuple[int, int, int, int]:
+    """Absolute rect of the monitor the cursor is on."""
+    u = ctypes.windll.user32
+    u.MonitorFromPoint.restype = c_void_p
+    u.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+    u.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                    ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+    u.GetMonitorInfoW.argtypes = [c_void_p, ctypes.POINTER(MONITORINFO)]
+    pt = wintypes.POINT()
+    u.GetCursorPos(ctypes.byref(pt))
+    hmon = u.MonitorFromPoint(pt, 2)  # MONITOR_DEFAULTTONEAREST
+    mi = MONITORINFO()
+    mi.cbSize = ctypes.sizeof(MONITORINFO)
+    u.GetMonitorInfoW(hmon, ctypes.byref(mi))
+    r = mi.rcMonitor
+    return (r.left, r.top, r.right, r.bottom)
+
+
+def window_rect_at(x: int, y: int) -> tuple[int, int, int, int] | None:
+    """Absolute rect of the top-level window under (x, y), via DWM visible bounds."""
+    u = ctypes.windll.user32
+    u.WindowFromPoint.restype = c_void_p
+    u.WindowFromPoint.argtypes = [wintypes.POINT]
+    u.GetAncestor.restype = c_void_p
+    u.GetAncestor.argtypes = [c_void_p, wintypes.UINT]
+    u.GetWindowRect.argtypes = [c_void_p, ctypes.POINTER(wintypes.RECT)]
+
+    hwnd = u.WindowFromPoint(wintypes.POINT(x, y))
+    if not hwnd:
+        return None
+    root_hwnd = u.GetAncestor(hwnd, 2)  # GA_ROOT
+    rect = wintypes.RECT()
+    res = 1
+    try:  # DWMWA_EXTENDED_FRAME_BOUNDS (9) = true visible bounds (no invisible border)
+        dwm = ctypes.windll.dwmapi
+        dwm.DwmGetWindowAttribute.argtypes = [c_void_p, wintypes.DWORD,
+                                              ctypes.POINTER(wintypes.RECT), wintypes.DWORD]
+        res = dwm.DwmGetWindowAttribute(root_hwnd, 9, ctypes.byref(rect), ctypes.sizeof(rect))
+    except Exception:
+        res = 1
+    if res != 0:  # DWM unavailable -> fall back to the raw window rect
+        u.GetWindowRect(root_hwnd, ctypes.byref(rect))
+    return (rect.left, rect.top, rect.right, rect.bottom)
 
 
 def set_clipboard_text(text: str) -> bool:
@@ -145,21 +218,93 @@ def set_clipboard_image(path: Path) -> bool:
         return False
 
 
+def _countdown(seconds: int) -> None:
+    for s in range(seconds, 0, -1):
+        print(f"-> capturing in {s}...", file=sys.stderr, flush=True)
+        time.sleep(1)
+
+
+def capture(mode: str, delay: int, all_screens: bool):
+    """Return a PIL Image for the chosen mode, or None if cancelled/empty."""
+    from PIL import Image, ImageGrab
+
+    if mode == "clipboard":  # nothing to wait for; delay is ignored
+        data = ImageGrab.grabclipboard()
+        if isinstance(data, Image.Image):
+            return data
+        if isinstance(data, list):
+            for p in data:
+                if Path(p).is_file():
+                    return Image.open(p)
+        return None
+
+    if delay > 0:
+        _countdown(delay)
+
+    if mode == "screen":
+        if all_screens:
+            return ImageGrab.grab(all_screens=True)
+        return ImageGrab.grab(bbox=monitor_rect_under_cursor(), all_screens=True)
+
+    if mode == "window":
+        pt = click_point()
+        if pt is None:
+            return None
+        time.sleep(0.08)  # let the overlay clear before querying the window under it
+        rect = window_rect_at(*pt)
+        if not rect or rect[2] - rect[0] < MIN_DRAG_PX or rect[3] - rect[1] < MIN_DRAG_PX:
+            return None
+        time.sleep(0.1)
+        return ImageGrab.grab(bbox=rect, all_screens=True)
+
+    # default: box
+    box = select_region()
+    if box is None:
+        return None
+    x1, y1, x2, y2 = box
+    if x2 - x1 < MIN_DRAG_PX or y2 - y1 < MIN_DRAG_PX:
+        return None
+    time.sleep(0.1)  # compositor-settle margin; overlay already hidden in release()
+    return ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True)
+
+
+def _parse_spec(raw: str) -> tuple[int, int]:
+    """Parse the first /snip arg into (delay_seconds, count).
+
+    '3s' -> wait 3 seconds, one shot.   '3' -> three shots in a row, no wait.
+    Anything else (e.g. the start of a question) -> (0, 1). Count is capped at 10.
+    """
+    raw = (raw or "").strip().lower()
+    m = re.fullmatch(r"(\d+)s", raw)
+    if m:
+        return int(m.group(1)), 1
+    if raw.isdigit():
+        return 0, max(1, min(10, int(raw)))
+    return 0, 1
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Draw-box screenshot for Claude Code.")
-    ap.add_argument("--out",
-                    default=str(Path(tempfile.gettempdir()) / "claude_capture.png"),
+    ap = argparse.ArgumentParser(description="Screenshot capture for Claude Code.")
+    ap.add_argument("--mode", choices=["box", "screen", "window", "clipboard"], default="box",
+                    help="what to capture (default: box)")
+    ap.add_argument("--delay", type=int, default=0,
+                    help="seconds to wait before each capture (box/screen/window)")
+    ap.add_argument("--count", type=int, default=1, help="number of captures in a row (max 10)")
+    ap.add_argument("--spec", default="",
+                    help="first /snip arg: 'Ns' = wait N seconds, 'N' = N shots (overrides --delay/--count)")
+    ap.add_argument("--all", action="store_true", help="with --mode screen: every monitor")
+    ap.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "claude_capture.png"),
                     help="where to save the PNG")
     ap.add_argument("--launch", action="store_true",
                     help="start a NEW `claude` session with the image instead of copying it")
     ap.add_argument("--copy-path", action="store_true",
                     help="copy the file PATH instead of the image (for @path or plain paste)")
     ap.add_argument("--print-path", action="store_true",
-                    help="print only the saved path to stdout (for the /snip command); no clipboard, no chatter")
+                    help="print only the saved path to stdout (for the /snip commands)")
     args = ap.parse_args()
 
     try:
-        from PIL import ImageGrab
+        import PIL  # noqa: F401
     except ImportError:
         print("Pillow is required:  python -m pip install pillow", file=sys.stderr)
         return 1
@@ -168,45 +313,58 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.unlink(missing_ok=True)  # clear any stale capture so a cancel leaves no file
 
+    delay, count = args.delay, args.count
+    if args.spec:
+        delay, count = _parse_spec(args.spec)
     abort = 0 if args.print_path else 1  # clean exit so the /snip !-command doesn't error
-    box = select_region()
-    if box is None:
-        print("X Cancelled.", file=sys.stderr)
-        return abort
-    x1, y1, x2, y2 = box
-    if x2 - x1 < MIN_DRAG_PX or y2 - y1 < MIN_DRAG_PX:
-        print("X Selection too small.", file=sys.stderr)
+
+    paths: list[Path] = []
+    for i in range(count):
+        try:
+            img = capture(args.mode, delay, args.all)
+        except Exception as exc:
+            print(f"X Capture failed: {exc}", file=sys.stderr)
+            break
+        if img is None:  # cancelled -> stop the series, keep what we already have
+            break
+        p = out if count == 1 else out.with_stem(f"{out.stem}_{i + 1}")
+        p.unlink(missing_ok=True)
+        try:
+            img.save(p, "PNG")
+        except Exception as exc:
+            print(f"X Save failed: {exc}", file=sys.stderr)
+            break
+        paths.append(p)
+
+    if not paths:
+        print("X Cancelled or nothing captured.", file=sys.stderr)
         return abort
 
-    time.sleep(0.1)  # compositor-settle margin; overlay is already hidden in release()
-    try:
-        ImageGrab.grab(bbox=(x1, y1, x2, y2), all_screens=True).save(out, "PNG")
-    except Exception as exc:
-        print(f"X Capture failed: {exc}", file=sys.stderr)
-        return abort
-
-    s = str(out)
-    saved = f"-> Saved {out}."
+    last = paths[-1]
+    n = len(paths)
+    saved = f"-> Saved {n} images." if n > 1 else f"-> Saved {last}."
     if args.print_path:
-        print(s)                       # stdout: path only (for the /snip command)
+        for p in paths:
+            print(str(p))              # stdout: one path per line (for the /snip commands)
     elif args.launch:
         try:
-            subprocess.run(["claude", s])  # NEW session, image path as prompt
+            subprocess.run(["claude", str(last)])
         except OSError as exc:
-            print(f"{saved} (Couldn't launch 'claude': {exc}. Image is at {out}.)", file=sys.stderr)
+            print(f"{saved} (Couldn't launch 'claude': {exc}. Image is at {last}.)", file=sys.stderr)
     elif args.copy_path:
-        if set_clipboard_text(s):
-            print(f"{saved} Path copied - paste it (or @{out}) into your prompt.", flush=True)
+        if set_clipboard_text("\n".join(str(p) for p in paths)):
+            print(f"{saved} Path(s) copied to the clipboard.", flush=True)
         else:
-            print(f"{saved} (Couldn't copy to clipboard; the file is at {out}.)", file=sys.stderr)
+            print(f"{saved} (Couldn't copy to clipboard; files are in {last.parent}.)", file=sys.stderr)
     else:                              # default: image on the clipboard for Alt+V
-        if set_clipboard_image(out):
-            print(f"{saved} Image copied - press Alt+V in Claude Code to stage it as "
+        extra = " (last of the set; clipboard holds one)" if n > 1 else ""
+        if set_clipboard_image(last):
+            print(f"{saved} Image copied{extra} - press Alt+V in Claude Code to stage it as "
                   "[Image #N]. Snip again + Alt+V for more, then type your text and send.", flush=True)
-        elif set_clipboard_text(s):
-            print(f"{saved} (Couldn't copy the image; copied the path instead - use @{out}.)", flush=True)
+        elif set_clipboard_text(str(last)):
+            print(f"{saved} (Couldn't copy the image; copied the path instead - use @{last}.)", flush=True)
         else:
-            print(f"{saved} (Couldn't copy to clipboard; the file is at {out}.)", file=sys.stderr)
+            print(f"{saved} (Couldn't copy to clipboard; files are in {last.parent}.)", file=sys.stderr)
     return 0
 
 

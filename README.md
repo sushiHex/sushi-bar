@@ -19,18 +19,32 @@ Update later with `/plugin marketplace update sushi-bar`.
 
 | Plugin | What it does |
 |--------|--------------|
-| **[snip](plugins/snip)** | Draw a box anywhere on screen → the shot loads straight into your Claude Code session. |
+| **[snip](plugins/snip)** | Capture a screenshot straight into your Claude Code session — box, screen, window, or clipboard. |
 
 ### 🖼️ snip
 
-Run **`/snip:snip`** → drag a box → Claude reads the shot in the same turn. Pass a question to act on it: `/snip:snip what's wrong with this error?`.
+Capture a shot and have Claude *read it in the same turn*. Four modes:
 
-- **Always a rectangular draw-box** (its own overlay, not the OS Snip's remembered mode) — multi-monitor and DPI-correct.
-- **Auto-read:** captures *and* loads the image for Claude in one step.
-- Tuned to run on **Sonnet at low effort** so the read-and-answer turn stays fast.
-- The bundled `snip.py` also works standalone (`python snip.py` → image on clipboard → **Alt+V**), with `--copy-path`, `--launch`, and `--print-path` modes.
+| Command | Captures |
+|---|---|
+| `/snip:box` | drag a rectangle |
+| `/snip:screen` | the monitor under your cursor |
+| `/snip:window` | click a window → just that window |
+| `/snip:clipboard` | whatever image is already on your clipboard |
 
-> **Honest note:** Claude Code's native **Win+Shift+S → Alt+V** already covers basic screenshot paste. `snip` adds the guaranteed draw-box and the one-step capture-and-analyze.
+**Modifiers** — the first word after the command:
+
+| Type | Effect |
+|---|---|
+| `/snip:box 3s` | wait **3 seconds**, then capture (line up a menu/tooltip first) |
+| `/snip:box 3` | take **3 shots** in a row → Claude reads all of them |
+| `/snip:box 3s what's broken?` | wait 3s, capture, then address your question |
+
+- **Runs on Sonnet at low effort by default** (set per-command) so the read-and-answer turn stays fast — it never changes your session's model or effort.
+- **Multi-monitor & DPI-correct.**
+- The bundled `snip.py` also works standalone (`python snip.py` → image on clipboard → **Alt+V**), with `--mode`, `--delay`, `--count`, `--copy-path`, `--launch`, `--print-path`.
+
+> **Honest note:** Claude Code's native **Win+Shift+S → Alt+V** already covers basic screenshot paste. `snip` adds the mode set, the timer/burst modifiers, and the one-step capture-and-analyze.
 
 **Requirements:** Windows 10/11 · Python 3.9+ · Pillow (`python -m pip install pillow`).
 

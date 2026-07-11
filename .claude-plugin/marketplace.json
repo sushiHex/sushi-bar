@@ -8,8 +8,8 @@
     {
       "name": "snip",
       "source": "./plugins/snip",
-      "description": "Draw-box screenshot capture that loads the shot straight into your Claude Code session.",
-      "version": "1.0.0",
+      "description": "Screenshot capture (box/screen/window/clipboard) that loads the shot straight into your Claude Code session.",
+      "version": "1.1.0",
       "author": { "name": "sushiHex" }
     }
   ]

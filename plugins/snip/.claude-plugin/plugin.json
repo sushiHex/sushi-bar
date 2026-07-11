@@ -1,7 +1,7 @@
 {
   "name": "snip",
-  "description": "Draw-box screenshot capture for Claude Code on native Windows: draw a box and Claude reads the shot (or it's staged for Alt+V).",
-  "version": "1.0.0",
+  "description": "Screenshot capture for Claude Code on native Windows - box, screen, window, or clipboard, with timer/burst modifiers. Claude reads the shot in the same turn.",
+  "version": "1.1.0",
   "author": {
     "name": "sushiHex"
   },
