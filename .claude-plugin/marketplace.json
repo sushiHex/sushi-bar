@@ -1,0 +1,16 @@
+{
+  "name": "sushi-bar",
+  "description": "Small, bite-sized Claude Code tools for native Windows, by sushiHex.",
+  "owner": {
+    "name": "sushiHex"
+  },
+  "plugins": [
+    {
+      "name": "snip",
+      "source": "./plugins/snip",
+      "description": "Draw-box screenshot capture that loads the shot straight into your Claude Code session.",
+      "version": "1.0.0",
+      "author": { "name": "sushiHex" }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "snip",
+  "description": "Draw-box screenshot capture for Claude Code on native Windows: draw a box and Claude reads the shot (or it's staged for Alt+V).",
+  "version": "1.0.0",
+  "author": {
+    "name": "sushiHex"
+  },
+  "license": "MIT",
+  "keywords": ["screenshot", "draw-box", "capture", "windows", "clipboard"]
+}
