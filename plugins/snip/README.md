@@ -2,7 +2,7 @@
 
 Draw-box screenshot capture for Claude Code on **native Windows**.
 
-`/snip` (from this plugin) opens a rectangular draw-box, captures exactly what you drag, and loads it into the session so Claude can see it. Pass a question to act on it: `/snip why is this layout broken?`.
+`/snip:snip` (from this plugin) opens a rectangular draw-box, captures exactly what you drag, and loads it into the session so Claude can see it. Pass a question to act on it: `/snip:snip why is this layout broken?`.
 
 The bundled `snip.py` is also a standalone CLI:
 
