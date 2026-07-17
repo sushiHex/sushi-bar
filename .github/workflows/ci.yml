@@ -1,0 +1,25 @@
+# Validate the plugin marketplace on every push/PR. This is a plugin
+# marketplace, not a Python package — there's no runtime test suite. What CAN
+# silently break users is a malformed manifest (bad JSON, missing field,
+# dangling source path, version drift between marketplace.json and a plugin's
+# own plugin.json) or a Python syntax error. scripts/validate_manifests.py
+# checks exactly those. Single ubuntu job — this validates structure, not
+# runtime behavior, so no OS/version matrix is warranted.
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate manifests + Python syntax
+        run: python scripts/validate_manifests.py
