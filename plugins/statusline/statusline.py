@@ -34,6 +34,7 @@ else:
 CYAN, GREY, WHITE, GREEN, YELLOW, RED, MAGENTA, BLUE = (
     "96", "90", "97", "92", "93", "91", "95", "94",
 )
+MODEL_GRAY = "38;5;245"  # medium gray, matching Claude Code's dim hint text (e.g. "(shift+tab to cycle)")
 
 
 def c(code: str, text: str) -> str:
@@ -52,17 +53,9 @@ def sev_color(pct: float) -> str:
     return GREEN
 
 
-# Context-bar fill: three shades of gray (brighter = fuller) instead of a loud
-# green/yellow/red, so it reads as a quiet gauge. 256-color grayscale ramp.
-GRAY_DARK, GRAY_MID, GRAY_LIGHT, GRAY_TRACK = "38;5;243", "38;5;248", "38;5;252", "38;5;237"
-
-
-def ctx_shade(pct: float) -> str:
-    if pct >= 80:
-        return GRAY_LIGHT
-    if pct >= 50:
-        return GRAY_MID
-    return GRAY_DARK
+# Context-bar: a flat, quiet gauge. Fill uses the same medium gray as the model
+# name (MODEL_GRAY); the empty track is a dimmer gray. No fullness-based shading.
+GRAY_TRACK = "38;5;237"
 
 
 def read_json() -> dict:
@@ -109,7 +102,7 @@ def short_dir(path: str) -> str:
 def bar(pct: float, width: int = 8) -> str:
     pct = max(0.0, min(100.0, pct))
     filled = int(round(pct / 100 * width))
-    return c(ctx_shade(pct), BAR_F * filled) + c(GRAY_TRACK, BAR_E * (width - filled))
+    return c(MODEL_GRAY, BAR_F * filled) + c(GRAY_TRACK, BAR_E * (width - filled))
 
 
 def fmt_reset(resets_at) -> str:
@@ -162,12 +155,12 @@ def main() -> None:
     if name != base:
         ident.append(c(CYAN, name))
     if branch:
-        ident.append(c(MAGENTA, f"{BR_PRE}{branch}"))
+        ident.append(c(CYAN, f"{BR_PRE}{branch}"))
     if ident:
         segs.append(" ".join(ident))
 
     if model:
-        segs.append(c(BLUE, model))
+        segs.append(c(MODEL_GRAY, model))
 
     if ctx is not None:
         try:

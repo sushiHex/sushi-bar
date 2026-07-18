@@ -10,7 +10,7 @@ A richer Claude Code status line, in one row:
 |---|---|
 | `⎇ master` | git branch (preceded by the session name only when it differs from the dir) |
 | `Opus 4.8 (1M)` | current model |
-| `███░░░░░ 34%` | context-window usage — a quiet three-shade gray gauge (brighter = fuller) |
+| `███░░░░░ 34%` | context-window usage — a quiet flat gray gauge |
 | `⧗ 7% (4h) · 86% (2d)` | subscription usage limits: 5-hour & 7-day, each % used + time-to-reset (green → yellow → red) |
 | `~/repos/fonts` | working directory (at the end) |
 
