@@ -44,12 +44,25 @@ SEP = c(GREY, SEP_TXT)
 
 
 def sev_color(pct: float) -> str:
-    """Green < 50, yellow < 80, red >= 80."""
+    """Green < 50, yellow < 80, red >= 80. Used for the usage-limit trackers."""
     if pct >= 80:
         return RED
     if pct >= 50:
         return YELLOW
     return GREEN
+
+
+# Context-bar fill: three shades of gray (brighter = fuller) instead of a loud
+# green/yellow/red, so it reads as a quiet gauge. 256-color grayscale ramp.
+GRAY_DARK, GRAY_MID, GRAY_LIGHT, GRAY_TRACK = "38;5;243", "38;5;248", "38;5;252", "38;5;237"
+
+
+def ctx_shade(pct: float) -> str:
+    if pct >= 80:
+        return GRAY_LIGHT
+    if pct >= 50:
+        return GRAY_MID
+    return GRAY_DARK
 
 
 def read_json() -> dict:
@@ -96,7 +109,7 @@ def short_dir(path: str) -> str:
 def bar(pct: float, width: int = 8) -> str:
     pct = max(0.0, min(100.0, pct))
     filled = int(round(pct / 100 * width))
-    return c(sev_color(pct), BAR_F * filled) + c(GREY, BAR_E * (width - filled))
+    return c(ctx_shade(pct), BAR_F * filled) + c(GRAY_TRACK, BAR_E * (width - filled))
 
 
 def fmt_reset(resets_at) -> str:
@@ -144,13 +157,14 @@ def main() -> None:
 
     segs: list[str] = []
 
-    # Show the session name only when it adds info (differs from the dir's basename).
-    head = c(GREY, short_dir(cwd))
+    # Identity first: session name (only when it differs from the dir's basename) + git branch.
+    ident = []
     if name != base:
-        head = c(CYAN, name) + " " + head
+        ident.append(c(CYAN, name))
     if branch:
-        head += " " + c(MAGENTA, f"{BR_PRE}{branch}")
-    segs.append(head)
+        ident.append(c(MAGENTA, f"{BR_PRE}{branch}"))
+    if ident:
+        segs.append(" ".join(ident))
 
     if model:
         segs.append(c(BLUE, model))
@@ -165,6 +179,9 @@ def main() -> None:
                           quota_seg(rl.get("seven_day"))) if q]
     if quotas:
         segs.append((c(GREY, CLK) if CLK else "") + c(GREY, " · ").join(quotas))
+
+    # Working directory, at the end.
+    segs.append(c(GREY, short_dir(cwd)))
 
     sys.stdout.write(SEP.join(segs))
 

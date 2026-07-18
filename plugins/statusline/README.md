@@ -3,15 +3,16 @@
 A richer Claude Code status line, in one row:
 
 ```
-fonts  ~/repos/fonts  ⎇ master │ Opus 4.8 (1M) │ ███░░░░░ 34% │ ⧗ 7% (4h) · 86% (2d)
+⎇ master │ Opus 4.8 (1M) │ ███░░░░░ 34% │ ⧗ 7% (4h) · 86% (2d) │ ~/repos/fonts
 ```
 
 | Segment | Shows |
 |---|---|
-| `fonts  ~/repos/fonts  ⎇ master` | session name · working dir · git branch |
+| `⎇ master` | git branch (preceded by the session name only when it differs from the dir) |
 | `Opus 4.8 (1M)` | current model |
-| `███░░░░░ 34%` | context-window usage (green → yellow → red) |
-| `⧗ 5h 7% (4h) · 7d 86% (2d)` | subscription usage limits: 5-hour & 7-day, each with % used and time-to-reset |
+| `███░░░░░ 34%` | context-window usage — a quiet three-shade gray gauge (brighter = fuller) |
+| `⧗ 7% (4h) · 86% (2d)` | subscription usage limits: 5-hour & 7-day, each % used + time-to-reset (green → yellow → red) |
+| `~/repos/fonts` | working directory (at the end) |
 
 It also keeps the terminal/tab **title** set to the session name.
 
