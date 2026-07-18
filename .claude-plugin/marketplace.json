@@ -11,6 +11,13 @@
       "description": "Screenshot capture (box/screen/window/clipboard) that loads the shot straight into your Claude Code session.",
       "version": "1.1.0",
       "author": { "name": "sushiHex" }
+    },
+    {
+      "name": "statusline",
+      "source": "./plugins/statusline",
+      "description": "Rich status line: session · dir · git branch, model, context bar, and 5h/7d usage-limit trackers.",
+      "version": "1.0.0",
+      "author": { "name": "sushiHex" }
     }
   ]
 }

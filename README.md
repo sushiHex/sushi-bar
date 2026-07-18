@@ -1,25 +1,27 @@
 # 🍣 sushi-bar
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%C2%B7%20cross--platform-blue)
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin%20marketplace-8A63D2)
 
-Small, bite-sized Claude Code tools for **native Windows**, by [sushiHex](https://github.com/sushiHex). A third-party [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) — add it once, install the plates you want.
+Small, bite-sized Claude Code tools, by [sushiHex](https://github.com/sushiHex). A third-party [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) — add it once, install the plates you want.
 
 ## Install
 
 ```
 /plugin marketplace add sushiHex/sushi-bar
 /plugin install snip@sushi-bar
+/plugin install statusline@sushi-bar
 ```
 
 Update later with `/plugin marketplace update sushi-bar`.
 
 ## Plugins
 
-| Plugin | What it does |
-|--------|--------------|
-| **[snip](plugins/snip)** | Capture a screenshot straight into your Claude Code session — box, screen, window, or clipboard. |
+| Plugin | Platform | What it does |
+|--------|----------|--------------|
+| **[snip](plugins/snip)** | Windows | Capture a screenshot straight into your Claude Code session — box, screen, window, or clipboard. |
+| **[statusline](plugins/statusline)** | cross-platform | A richer status line — session · dir · git branch, model, context bar, and 5h/7d usage-limit trackers. |
 
 ### 🖼️ snip
 
@@ -47,6 +49,28 @@ Capture a shot and have Claude *read it in the same turn*. Four modes:
 > **Honest note:** Claude Code's native **Win+Shift+S → Alt+V** already covers basic screenshot paste. `snip` adds the mode set, the timer/burst modifiers, and the one-step capture-and-analyze.
 
 **Requirements:** Windows 10/11 · Python 3.9+ · Pillow (`python -m pip install pillow`).
+
+### 📊 statusline
+
+A richer status line, in one row:
+
+```
+fonts  ~/repos/fonts  ⎇ master │ Opus 4.8 (1M) │ ███░░░░░ 34% │ ⧗ 5h 7% (4h) · 7d 86% (2d)
+```
+
+session · dir · **git branch** │ **model** │ **context bar** (green→yellow→red) │ **5h & 7d usage-limit trackers** (% used + time-to-reset). Also keeps the terminal/tab title set.
+
+```
+/plugin install statusline@sushi-bar
+/statusline:install          # wires it into settings.json (backs up any existing one)
+/statusline:install ascii    # glyph-free variant for bare terminals
+/statusline:uninstall        # restores your previous status line
+```
+
+- A plugin can't set a main status line directly, so `/statusline:install` writes the `statusLine` block for you. Re-run it after updating the plugin.
+- The **5h/7d trackers show only on Pro/Max, after the session's first API response** — every segment is optional and degrades cleanly.
+
+**Requirements:** Python 3.9+ (`python` or `python3`). Cross-platform.
 
 ## License
 
