@@ -27,9 +27,9 @@ except Exception:
 
 ASCII = bool(os.environ.get("SUSHI_STATUSLINE_ASCII"))
 if ASCII:
-    SEP_TXT, BAR_F, BAR_E, BR_PRE, CLK = " | ", "#", "-", "", ""
+    BAR_F, BAR_E, BR_PRE, CLK = "#", "-", "", ""
 else:
-    SEP_TXT, BAR_F, BAR_E, BR_PRE, CLK = " │ ", "█", "░", "⎇ ", "⧗ "
+    BAR_F, BAR_E, BR_PRE, CLK = "█", "░", "⎇ ", "⧗ "
 
 CYAN, GREY, WHITE, GREEN, YELLOW, RED, MAGENTA, BLUE = (
     "96", "90", "97", "92", "93", "91", "95", "94",
@@ -40,7 +40,7 @@ def c(code: str, text: str) -> str:
     return f"\033[{code}m{text}\033[0m"
 
 
-SEP = c(GREY, SEP_TXT)
+SEP = "  "  # two spaces between elements — no divider; color already separates them
 
 
 def sev_color(pct: float) -> str:

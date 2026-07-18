@@ -1,7 +1,7 @@
 {
   "name": "statusline",
   "description": "Status line for Claude Code: session · dir · git branch │ model │ context bar │ 5h & 7d usage-limit trackers. Cross-platform, no dependencies. Run /statusline:install to wire it in.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": { "name": "sushiHex" },
   "license": "MIT",
   "keywords": ["statusline", "status-line", "usage-limits", "rate-limits", "context-window", "git-branch"]
