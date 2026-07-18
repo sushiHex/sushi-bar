@@ -29,12 +29,13 @@ ASCII = bool(os.environ.get("SUSHI_STATUSLINE_ASCII"))
 if ASCII:
     BAR_F, BAR_E, BR_PRE, CLK = "#", "-", "", ""
 else:
-    BAR_F, BAR_E, BR_PRE, CLK = "█", "░", "⎇ ", "⧗ "
+    BAR_F, BAR_E, BR_PRE, CLK = "▒", "░", "⎇ ", "⧗ "
 
 CYAN, GREY, WHITE, GREEN, YELLOW, RED, MAGENTA, BLUE = (
     "96", "90", "97", "92", "93", "91", "95", "94",
 )
 MODEL_GRAY = "38;5;245"  # medium gray, matching Claude Code's dim hint text (e.g. "(shift+tab to cycle)")
+LGRAY = "37"  # light gray — the context %, one step below bright white
 
 
 def c(code: str, text: str) -> str:
@@ -121,6 +122,15 @@ def fmt_reset(resets_at) -> str:
     return f"{int(round(hours / 24))}d"
 
 
+def fmt_tokens(n: float) -> str:
+    """Compact token count: 128000 -> '128k', 1200000 -> '1.2M'."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}".rstrip("0").rstrip(".") + "M"
+    if n >= 1000:
+        return f"{round(n / 1000)}k"
+    return str(int(round(n)))
+
+
 def quota_seg(window: dict) -> str:
     if not isinstance(window, dict):
         return ""
@@ -128,8 +138,9 @@ def quota_seg(window: dict) -> str:
     if pct is None:
         return ""
     reset = fmt_reset(window.get("resets_at"))
-    tail = f" ({reset})" if reset else ""
+    tail = f" {reset}" if reset else ""
     # No 5h/7d label — the reset window (minutes/hours vs days) implies which is which.
+    # No parens — the reset is dim gray, already visually distinct from the colored %.
     return c(sev_color(pct), f"{int(round(pct))}%") + c(GREY, tail)
 
 
@@ -140,8 +151,12 @@ def main() -> None:
 
     base = os.path.basename(cwd.rstrip("/\\"))
     name = d.get("session_name") or base or "claude"
-    model = ((d.get("model") or {}).get("display_name") or "").replace(" context)", ")")
-    ctx = (d.get("context_window") or {}).get("used_percentage")
+    # Strip any "(...)" suffix — the capacity is shown separately as the total-size
+    # element next to the bar. "Opus 4.8 (1M context)" -> "Opus 4.8"; "Sonnet 5" -> "Sonnet 5".
+    model = ((d.get("model") or {}).get("display_name") or "").split(" (")[0].strip()
+    cw = d.get("context_window") or {}
+    ctx = cw.get("used_percentage")
+    cw_size = cw.get("context_window_size")
     rl = d.get("rate_limits") or {}
     branch = git_branch(cwd)
 
@@ -164,7 +179,14 @@ def main() -> None:
 
     if ctx is not None:
         try:
-            segs.append(f"{bar(float(ctx))} {c(WHITE, str(int(round(float(ctx)))) + '%')}")
+            pct = float(ctx)
+            if cw_size:
+                # current size · bar · total size — usage on the left (where the bar fills), capacity on the right.
+                total = c(LGRAY, fmt_tokens(float(cw_size)))
+                current = c(LGRAY, fmt_tokens(pct / 100 * float(cw_size)))
+                segs.append(f"{current} {bar(pct)} {total}")
+            else:
+                segs.append(f"{bar(pct)} {c(LGRAY, f'{int(round(pct))}%')}")
         except (TypeError, ValueError):
             pass
 
