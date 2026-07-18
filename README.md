@@ -55,7 +55,7 @@ Capture a shot and have Claude *read it in the same turn*. Four modes:
 A richer status line, in one row:
 
 ```
-fonts  ~/repos/fonts  ⎇ master │ Opus 4.8 (1M) │ ███░░░░░ 34% │ ⧗ 5h 7% (4h) · 7d 86% (2d)
+fonts  ~/repos/fonts  ⎇ master │ Opus 4.8 (1M) │ ███░░░░░ 34% │ ⧗ 7% (4h) · 86% (2d)
 ```
 
 session · dir · **git branch** │ **model** │ **context bar** (green→yellow→red) │ **5h & 7d usage-limit trackers** (% used + time-to-reset). Also keeps the terminal/tab title set.

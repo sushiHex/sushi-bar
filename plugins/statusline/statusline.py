@@ -115,7 +115,7 @@ def fmt_reset(resets_at) -> str:
     return f"{int(round(hours / 24))}d"
 
 
-def quota_seg(label: str, window: dict) -> str:
+def quota_seg(window: dict) -> str:
     if not isinstance(window, dict):
         return ""
     pct = window.get("used_percentage")
@@ -123,7 +123,8 @@ def quota_seg(label: str, window: dict) -> str:
         return ""
     reset = fmt_reset(window.get("resets_at"))
     tail = f" ({reset})" if reset else ""
-    return c(sev_color(pct), f"{label} {int(round(pct))}%") + c(GREY, tail)
+    # No 5h/7d label — the reset window (minutes/hours vs days) implies which is which.
+    return c(sev_color(pct), f"{int(round(pct))}%") + c(GREY, tail)
 
 
 def main() -> None:
@@ -131,7 +132,8 @@ def main() -> None:
     ws = d.get("workspace") or {}
     cwd = ws.get("current_dir") or d.get("cwd") or os.getcwd()
 
-    name = d.get("session_name") or os.path.basename(cwd.rstrip("/\\")) or "claude"
+    base = os.path.basename(cwd.rstrip("/\\"))
+    name = d.get("session_name") or base or "claude"
     model = ((d.get("model") or {}).get("display_name") or "").replace(" context)", ")")
     ctx = (d.get("context_window") or {}).get("used_percentage")
     rl = d.get("rate_limits") or {}
@@ -142,7 +144,10 @@ def main() -> None:
 
     segs: list[str] = []
 
-    head = c(CYAN, name) + " " + c(GREY, short_dir(cwd))
+    # Show the session name only when it adds info (differs from the dir's basename).
+    head = c(GREY, short_dir(cwd))
+    if name != base:
+        head = c(CYAN, name) + " " + head
     if branch:
         head += " " + c(MAGENTA, f"{BR_PRE}{branch}")
     segs.append(head)
@@ -156,8 +161,8 @@ def main() -> None:
         except (TypeError, ValueError):
             pass
 
-    quotas = [q for q in (quota_seg("5h", rl.get("five_hour")),
-                          quota_seg("7d", rl.get("seven_day"))) if q]
+    quotas = [q for q in (quota_seg(rl.get("five_hour")),
+                          quota_seg(rl.get("seven_day"))) if q]
     if quotas:
         segs.append((c(GREY, CLK) if CLK else "") + c(GREY, " · ").join(quotas))
 

@@ -3,7 +3,7 @@
 A richer Claude Code status line, in one row:
 
 ```
-fonts  ~/repos/fonts  ⎇ master │ Opus 4.8 (1M) │ ███░░░░░ 34% │ ⧗ 5h 7% (4h) · 7d 86% (2d)
+fonts  ~/repos/fonts  ⎇ master │ Opus 4.8 (1M) │ ███░░░░░ 34% │ ⧗ 7% (4h) · 86% (2d)
 ```
 
 | Segment | Shows |
