@@ -21,7 +21,7 @@ Update later with `/plugin marketplace update sushi-bar`.
 | Plugin | Platform | What it does |
 |--------|----------|--------------|
 | **[snip](plugins/snip)** | Windows | Capture a screenshot straight into your Claude Code session — box, screen, window, or clipboard. |
-| **[statusline](plugins/statusline)** | cross-platform | A richer status line — session · dir · git branch, model, context bar, and 5h/7d usage-limit trackers. |
+| **[statusline](plugins/statusline)** | cross-platform | A richer status line — session · dir · git branch, model + reasoning effort, context bar, and 5h/7d usage-limit trackers. |
 
 ### 🖼️ snip
 
@@ -55,10 +55,10 @@ Capture a shot and have Claude *read it in the same turn*. Four modes:
 A richer status line, in one row:
 
 ```
-⎇ master  Opus 4.8  128k ▒▒░░░░░░ 1M  ⧗ 7% 4h · 86% 2d  ~/repos/fonts
+⎇ master  Opus 4.8 high  128k ▒▒░░░░░░ 1M  ⧗ 7% 4h · 86% 2d  ~/repos/fonts
 ```
 
-In order: **git branch** (with session name when it differs from the dir) · **model** · **context** (tokens used · a dithered gray gauge · window capacity, derived per model) · **5h & 7d usage-limit trackers** (% used + time-to-reset, green→yellow→red) · **working dir**. Elements are separated by spacing (no dividers); it also keeps the terminal/tab title set.
+In order: **git branch** (with session name when it differs from the dir) · **model + reasoning effort** (plus `⚡fast` while fast mode is on) · **context** (tokens used · a dithered gray gauge · window capacity, derived per model) · **5h & 7d usage-limit trackers** (% used + time-to-reset, green→yellow→red) · **working dir**. Elements are separated by spacing (no dividers); it also keeps the terminal/tab title set.
 
 ```
 /plugin install statusline@sushi-bar

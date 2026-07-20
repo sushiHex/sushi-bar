@@ -15,8 +15,8 @@
     {
       "name": "statusline",
       "source": "./plugins/statusline",
-      "description": "Rich status line: session · git branch, model, context bar, 5h/7d usage-limit trackers, and dir.",
-      "version": "1.0.5",
+      "description": "Rich status line: session · git branch, model + reasoning effort, context bar, 5h/7d usage-limit trackers, and dir.",
+      "version": "1.0.6",
       "author": { "name": "sushiHex" }
     }
   ]

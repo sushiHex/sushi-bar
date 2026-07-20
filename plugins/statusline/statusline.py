@@ -27,9 +27,9 @@ except Exception:
 
 ASCII = bool(os.environ.get("SUSHI_STATUSLINE_ASCII"))
 if ASCII:
-    BAR_F, BAR_E, BR_PRE, CLK = "#", "-", "", ""
+    BAR_F, BAR_E, BR_PRE, CLK, FAST = "#", "-", "", "", "fast"
 else:
-    BAR_F, BAR_E, BR_PRE, CLK = "▒", "░", "⎇ ", "⧗ "
+    BAR_F, BAR_E, BR_PRE, CLK, FAST = "▒", "░", "⎇ ", "⧗ ", "⚡fast"
 
 CYAN, GREY, WHITE, GREEN, YELLOW, RED, MAGENTA, BLUE = (
     "96", "90", "97", "92", "93", "91", "95", "94",
@@ -154,6 +154,12 @@ def main() -> None:
     # Strip any "(...)" suffix — the capacity is shown separately as the total-size
     # element next to the bar. "Opus 4.8 (1M context)" -> "Opus 4.8"; "Sonnet 5" -> "Sonnet 5".
     model = ((d.get("model") or {}).get("display_name") or "").split(" (")[0].strip()
+    # Reasoning effort: low | medium | high | xhigh | max. Only present for models that
+    # support it (absent on Opus 4.0/4.1, Sonnet 4.x, Haiku 4.5, claude-3-*), so it
+    # simply drops out rather than rendering a misleading default.
+    effort = str((d.get("effort") or {}).get("level") or "").strip()
+    # Fast mode is a toggle (/fast) — shown only while it's on, never as "off".
+    fast = bool(d.get("fast_mode"))
     cw = d.get("context_window") or {}
     ctx = cw.get("used_percentage")
     cw_size = cw.get("context_window_size")
@@ -175,7 +181,14 @@ def main() -> None:
         segs.append(" ".join(ident))
 
     if model:
-        segs.append(c(MODEL_GRAY, model))
+        # Effort rides with the model as one unit (single space, not SEP) and sits a
+        # shade dimmer, so the model name stays the primary read.
+        seg = c(MODEL_GRAY, model)
+        if effort:
+            seg += " " + c(GREY, effort)
+        if fast:
+            seg += " " + c(GREY, FAST)
+        segs.append(seg)
 
     if ctx is not None:
         try:
