@@ -1,0 +1,10 @@
+{
+  "name": "prose",
+  "description": "Two selectable output styles for Claude Code: ELI5 (plain language, everyday analogies, every term defined) and ASD-STE100 (Simplified Technical English). Both change only how Claude writes to you - normal coding behaviour, code, paths and commands are untouched.",
+  "version": "1.0.0",
+  "author": {
+    "name": "sushiHex"
+  },
+  "license": "MIT",
+  "keywords": ["output-style", "eli5", "plain-language", "asd-ste100", "simplified-technical-english", "controlled-language", "writing"]
+}

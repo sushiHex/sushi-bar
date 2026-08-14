@@ -12,6 +12,7 @@ Small, bite-sized Claude Code tools, by [sushiHex](https://github.com/sushiHex).
 /plugin marketplace add sushiHex/sushi-bar
 /plugin install snip@sushi-bar
 /plugin install statusline@sushi-bar
+/plugin install prose@sushi-bar
 ```
 
 Update later with `/plugin marketplace update sushi-bar`.
@@ -22,6 +23,7 @@ Update later with `/plugin marketplace update sushi-bar`.
 |--------|----------|--------------|
 | **[snip](plugins/snip)** | Windows | Capture a screenshot straight into your Claude Code session — box, screen, window, or clipboard. |
 | **[statusline](plugins/statusline)** | cross-platform | A richer status line — session · dir · git branch, model + reasoning effort, context bar, and 5h/7d usage-limit trackers. |
+| **[prose](plugins/prose)** | cross-platform | Two selectable output styles — ELI5 plain language, and ASD-STE100 Simplified Technical English. |
 
 ### 🖼️ snip
 
@@ -71,6 +73,29 @@ In order: **git branch** (with session name when it differs from the dir) · **m
 - The **5h/7d trackers show only on Pro/Max, after the session's first API response** — every segment is optional and degrades cleanly.
 
 **Requirements:** Python 3.9+ (`python` or `python3`). Cross-platform.
+
+### ✍️ prose
+
+Two selectable **output styles**. They change how Claude writes *to you*, not what it builds.
+
+| Style | Reads like |
+|---|---|
+| `prose:ELI5` | Plain language, everyday analogies, every technical term defined on first use |
+| `prose:ASD-STE100` | [Simplified Technical English](https://www.asd-ste100.org/) — short sentences, active voice, one instruction per sentence |
+
+```
+/plugin install prose@sushi-bar
+```
+
+Then pick one in **`/config` → Output style**, or set `"outputStyle": "prose:ELI5"` in `settings.json`.
+
+- Both keep Claude Code's normal engineering behaviour (`keep-coding-instructions: true`) — only the prose changes.
+- Code, commands, paths and error text are copied **verbatim**; a caveat is never dropped for being "advanced"; bad news stays blunt.
+- Commit messages, code comments and in-repo docs keep **their project's** conventions.
+
+> **Honest limit:** the ASD-STE100 style applies the *writing rules*. The ~900-word approved dictionary is licensed by the ASD and isn't bundled, so output isn't verified against it — and the style forbids Claude from claiming otherwise.
+
+**Requirements:** none. No dependencies, no scripts.
 
 ## License
 

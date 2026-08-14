@@ -18,6 +18,13 @@
       "description": "Rich status line: session · git branch, model + reasoning effort, context bar, 5h/7d usage-limit trackers, and dir.",
       "version": "1.0.6",
       "author": { "name": "sushiHex" }
+    },
+    {
+      "name": "prose",
+      "source": "./plugins/prose",
+      "description": "Selectable output styles: ELI5 plain language, and ASD-STE100 Simplified Technical English. Changes how Claude writes to you, not what it builds.",
+      "version": "1.0.0",
+      "author": { "name": "sushiHex" }
     }
   ]
 }
