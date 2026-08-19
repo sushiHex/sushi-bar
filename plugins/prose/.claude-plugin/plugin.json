@@ -1,7 +1,7 @@
 {
   "name": "prose",
-  "description": "Two selectable output styles for Claude Code: ELI5 (plain language, everyday analogies, every term defined) and ASD-STE100 (Simplified Technical English). Both change only how Claude writes to you - normal coding behaviour, code, paths and commands are untouched.",
-  "version": "1.0.0",
+  "description": "Three selectable output styles for Claude Code: ELI5 (plain language, everyday analogies, every term defined), ASD-STE100 (Simplified Technical English), and STELI5 (ELI5's explaining under STE's sentence discipline). All three change only how Claude writes to you - normal coding behaviour, code, paths and commands are untouched.",
+  "version": "1.1.0",
   "author": {
     "name": "sushiHex"
   },

@@ -23,7 +23,7 @@ Update later with `/plugin marketplace update sushi-bar`.
 |--------|----------|--------------|
 | **[snip](plugins/snip)** | Windows | Capture a screenshot straight into your Claude Code session — box, screen, window, or clipboard. |
 | **[statusline](plugins/statusline)** | cross-platform | A richer status line — session · dir · git branch, model + reasoning effort, context bar, and 5h/7d usage-limit trackers. |
-| **[prose](plugins/prose)** | cross-platform | Two selectable output styles — ELI5 plain language, and ASD-STE100 Simplified Technical English. |
+| **[prose](plugins/prose)** | cross-platform | Three selectable output styles — ELI5 plain language, ASD-STE100 Simplified Technical English, and STELI5 (both at once). |
 
 ### 🖼️ snip
 
@@ -76,12 +76,13 @@ In order: **git branch** (with session name when it differs from the dir) · **m
 
 ### ✍️ prose
 
-Two selectable **output styles**. They change how Claude writes *to you*, not what it builds.
+Three selectable **output styles**. They change how Claude writes *to you*, not what it builds.
 
 | Style | Reads like |
 |---|---|
 | `prose:ELI5` | Plain language, everyday analogies, every technical term defined on first use |
 | `prose:ASD-STE100` | [Simplified Technical English](https://www.asd-ste100.org/) — short sentences, active voice, one instruction per sentence |
+| `prose:STELI5` | Both: ELI5's explaining, under STE's sentence discipline. Measured at **zero** sentences over 35 words where ELI5 had three. |
 
 ```
 /plugin install prose@sushi-bar

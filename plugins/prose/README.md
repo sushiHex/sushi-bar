@@ -1,6 +1,6 @@
 # ✍️ prose
 
-Two selectable **output styles** for Claude Code. They change how Claude writes
+Three selectable **output styles** for Claude Code. They change how Claude writes
 *to you*. They do not change what it builds.
 
 ```
@@ -13,6 +13,7 @@ Then pick one in **`/config` → Output style**:
 |---|---|
 | `prose:ELI5` | Plain language, everyday analogies, every technical term defined on first use |
 | `prose:ASD-STE100` | Simplified Technical English — short sentences, active voice, one instruction per sentence |
+| `prose:STELI5` | Both: ELI5's explaining, under STE's sentence discipline |
 
 Set it in `settings.json` instead if you prefer:
 
@@ -66,6 +67,34 @@ being circumlocuted.
 > and Defence Industries Association of Europe and is not bundled, so output is
 > **not** verified against it. The style forbids Claude from claiming full
 > compliance.
+
+## 🥢 STELI5
+
+The merge. ELI5 knows *what* to explain but its length rules did not bind;
+ASD-STE100 has the sentence machinery but says nothing about teaching. STELI5
+runs ELI5's job through STE's discipline — short sentences, active voice, one
+idea each, numbered steps, consistent terms, plus term definitions and "say why".
+
+The two parents contradict each other in exactly one place, and the style
+resolves it rather than picking a side. STE bans figures of speech so a reader
+can never mistake one for a fact; ELI5 needs analogies. A comparison is
+therefore allowed only when **marked** ("This works like a queue at a counter")
+and **bounded** ("The difference is that the queue never reorders itself"). An
+unmarked metaphor is still banned, which honours STE's actual intent.
+
+Measured against both parents and a no-guidance control, 4 reps each, same
+probe:
+
+| | words | median sentence | longest | >25w | >35w |
+|---|---|---|---|---|---|
+| control | 265–305 | 14–18 | 28–44 | 11 | 2 |
+| ELI5 | 208–361 | 12–19 | 35–49 | 11 | 3 |
+| ASD-STE100 | 180–201 | 8–10 | 18–25 | 0 | 0 |
+| **STELI5** | 237–377 | **9–14** | **21–34** | **2** | **0** |
+
+It inherits the discipline — zero sentences over 35 words where ELI5 had three,
+and `>25w` down from 11 to 2 — while writing *more* than ASD-STE100, which is
+the point: it explains.
 
 ## How these were built
 
