@@ -23,7 +23,7 @@
       "name": "prose",
       "source": "./plugins/prose",
       "description": "Selectable output styles: ELI5 plain language, ASD-STE100 Simplified Technical English, STELI5 (both at once), and VONNEGUT (tiny chapters, homely analogies). Changes how Claude writes to you, not what it builds.",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "author": { "name": "sushiHex" }
     }
   ]

@@ -1,7 +1,7 @@
 {
   "name": "prose",
   "description": "Four selectable output styles for Claude Code: ELI5 (plain language, everyday analogies, every term defined), ASD-STE100 (Simplified Technical English), STELI5 (ELI5's explaining under STE's sentence discipline), and VONNEGUT (tiny chapters, a homely analogy per mechanism, subject-verb-object sentences). All four change only how Claude writes to you - normal coding behaviour, code, paths and commands are untouched.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": {
     "name": "sushiHex"
   },
