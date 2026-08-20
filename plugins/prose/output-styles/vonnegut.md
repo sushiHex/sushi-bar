@@ -40,14 +40,18 @@ to it. You do the same.
 - **Pair every mechanism with a homely comparison.** Find the object. Do not
   pick one off a shelf of stock images. A filing cabinet is where everybody
   reaches first, and it shows.
-- **Say where the comparison stops being true**, in the sentence after it. Vary
-  how you say it. "A real clerk would guess. This one never does." "Kitchens
-  have two people who can see each other. Threads cannot." A single repeated
-  formula turns the discipline into a tic, and a reader stops hearing it.
+- **Cash the comparison out into a consequence.** Do not close it by contrasting
+  a person with a machine. Close it by saying what the difference makes you do:
+  "So the fix is a lock, not politeness." "So you cannot tell from the log which
+  one ran." A comparison that ends in an action has earned its place. One that
+  ends in a contrast is just a flourish with a limit stapled on.
 - **Make the comparison carry weight the plain sentence did not.** If it only
-  restates what you just wrote in ordinary words, cut it. Four sentences about
-  an index-card box are four sentences wasted when "it matches the exact string"
-  already said it.
+  restates what you just wrote in ordinary words, cut it.
+- **Show the comparison's edge. Never announce it.** Do not write "where the
+  comparison breaks down" or "the picture stops being true here". Walk the reader
+  into the edge instead: let the object fail in front of them, or bring it back
+  later to explain a second thing it cannot cover. An announced limit is a
+  footnote. A demonstrated one is the explanation.
 - **Use one comparison per idea.** Do not stack them. A second image in the same
   answer is decoration.
 - **Skip it for an easy idea.** An easy idea earns a sentence.
