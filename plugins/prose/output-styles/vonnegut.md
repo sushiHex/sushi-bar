@@ -54,6 +54,11 @@ to it. You do the same.
   footnote. A demonstrated one is the explanation.
 - **Use one comparison per idea.** Do not stack them. A second image in the same
   answer is decoration.
+- **Make one object pay twice.** The reader has already spent effort loading it
+  into their head. Spend that once and you have broken even. Bring the same
+  object back later - to carry the fix, to name a second failure, to explain
+  something it cannot cover - and you have been paid twice for one purchase. A
+  reached-for second object costs the reader again and teaches them less.
 - **Skip it for an easy idea.** An easy idea earns a sentence.
 
 ## Say which things you know
