@@ -160,6 +160,12 @@ def main() -> None:
     effort = str((d.get("effort") or {}).get("level") or "").strip()
     # Fast mode is a toggle (/fast) — shown only while it's on, never as "off".
     fast = bool(d.get("fast_mode"))
+    # Output style reshapes every reply, so it belongs next to effort. "default"
+    # is the stock behaviour and earns no slot. A plugin style arrives namespaced
+    # ("prose:STELI5"); the prefix is install detail rather than session state, so
+    # only the leaf is shown.
+    style = str((d.get("output_style") or {}).get("name") or "").strip()
+    style = "" if style.lower() == "default" else style.rsplit(":", 1)[-1].strip()
     cw = d.get("context_window") or {}
     ctx = cw.get("used_percentage")
     cw_size = cw.get("context_window_size")
@@ -180,14 +186,15 @@ def main() -> None:
     if ident:
         segs.append(" ".join(ident))
 
-    if model:
-        # Effort rides with the model as one unit (single space, not SEP) and sits a
-        # shade dimmer, so the model name stays the primary read.
-        seg = c(MODEL_GRAY, model)
-        if effort:
-            seg += " " + c(GREY, effort)
-        if fast:
-            seg += " " + c(GREY, FAST)
+    if model or style:
+        # Effort, fast mode and output style ride with the model as one unit
+        # (single space, not SEP) and sit a shade dimmer, so the model name stays
+        # the primary read. Each drops out independently when unset, so a default
+        # session still renders just the model.
+        seg = c(MODEL_GRAY, model) if model else ""
+        for extra in (effort, FAST if fast else "", style):
+            if extra:
+                seg = f"{seg} {c(GREY, extra)}" if seg else c(GREY, extra)
         segs.append(seg)
 
     if ctx is not None:

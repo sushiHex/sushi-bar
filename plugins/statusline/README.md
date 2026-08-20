@@ -10,6 +10,7 @@ A richer Claude Code status line, in one row:
 |---|---|
 | `⎇ master` | git branch (preceded by the session name only when it differs from the dir) |
 | `Opus 4.8 high` | current model + reasoning effort (`low`/`medium`/`high`/`xhigh`/`max`), plus `⚡fast` while fast mode is on |
+| `Opus 4.8 high STELI5` | …and the active output style, when one is set. `default` earns no slot; a plugin style (`prose:STELI5`) shows just the leaf |
 | `128k ▒▒░░░░░░ 1M` | context window: tokens used · a dithered gray gauge · capacity (derived from the window size for every model) |
 | `⧗ 7% 4h · 86% 2d` | subscription usage limits: 5-hour & 7-day, each % used + time-to-reset (green → yellow → red) |
 | `~/repos/fonts` | working directory (at the end) |
