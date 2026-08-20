@@ -9,7 +9,7 @@
       "name": "snip",
       "source": "./plugins/snip",
       "description": "Screenshot capture (box/screen/window/clipboard) that loads the shot straight into your Claude Code session.",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": { "name": "sushiHex" }
     },
     {

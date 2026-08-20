@@ -36,6 +36,12 @@ from pathlib import Path
 MIN_DRAG_PX = 3             # ignore accidental clicks / near-zero drags/windows
 SELECT_TIMEOUT_MS = 60_000  # auto-cancel an overlay if left idle this long
 
+# powershell is a console-subsystem program, so Windows hands it a console
+# unless told not to - and on Win11 that console is a visible terminal window.
+# It only shows when snip runs from a windowless parent, but the flag is free.
+# getattr: the constant is Windows-only, and 0 means "no extra flags" elsewhere.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def _set_dpi_aware() -> None:
     """Per-monitor DPI awareness so coords match physical screen pixels."""
@@ -187,6 +193,7 @@ def set_clipboard_text(text: str) -> bool:
             ["powershell.exe", "-NoProfile", "-Command", "Set-Clipboard -Value $env:SNIP_TXT"],
             capture_output=True, text=True,
             env={**os.environ, "SNIP_TXT": text},
+            creationflags=NO_WINDOW,
         )
         return r.returncode == 0
     except OSError:
@@ -212,6 +219,7 @@ def set_clipboard_image(path: Path) -> bool:
             ["powershell.exe", "-STA", "-NoProfile", "-Command", ps],
             capture_output=True, text=True,
             env={**os.environ, "SNIP_IMG": str(path)},
+            creationflags=NO_WINDOW,
         )
         return r.returncode == 0
     except Exception:
@@ -284,6 +292,14 @@ def _parse_spec(raw: str) -> tuple[int, int]:
 
 
 def main() -> int:
+    # Before anything reads a coordinate. This used to live only inside
+    # _overlay(), which box and window mode open and screen mode does not - so
+    # screen mode ran DPI-unaware and Windows handed it virtualized coordinates
+    # while ImageGrab worked in physical pixels. Measured on a 3840x2160 display
+    # at 150%: the capture came back 2560x1440, silently missing the right third
+    # and the bottom third of the monitor.
+    _set_dpi_aware()
+
     ap = argparse.ArgumentParser(description="Screenshot capture for Claude Code.")
     ap.add_argument("--mode", choices=["box", "screen", "window", "clipboard"], default="box",
                     help="what to capture (default: box)")
@@ -313,7 +329,9 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.unlink(missing_ok=True)  # clear any stale capture so a cancel leaves no file
 
-    delay, count = args.delay, args.count
+    # Clamped here too, not only in _parse_spec: --help promises a max of 10 and
+    # the flag path enforced nothing, so --count 25 wrote 25 files.
+    delay, count = args.delay, max(1, min(10, args.count))
     if args.spec:
         delay, count = _parse_spec(args.spec)
     abort = 0 if args.print_path else 1  # clean exit so the /snip !-command doesn't error
