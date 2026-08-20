@@ -1,10 +1,10 @@
 {
   "name": "prose",
-  "description": "Three selectable output styles for Claude Code: ELI5 (plain language, everyday analogies, every term defined), ASD-STE100 (Simplified Technical English), and STELI5 (ELI5's explaining under STE's sentence discipline). All three change only how Claude writes to you - normal coding behaviour, code, paths and commands are untouched.",
-  "version": "1.1.0",
+  "description": "Four selectable output styles for Claude Code: ELI5 (plain language, everyday analogies, every term defined), ASD-STE100 (Simplified Technical English), STELI5 (ELI5's explaining under STE's sentence discipline), and VONNEGUT (tiny chapters, a homely analogy per mechanism, subject-verb-object sentences). All four change only how Claude writes to you - normal coding behaviour, code, paths and commands are untouched.",
+  "version": "1.2.0",
   "author": {
     "name": "sushiHex"
   },
   "license": "MIT",
-  "keywords": ["output-style", "eli5", "plain-language", "asd-ste100", "simplified-technical-english", "controlled-language", "writing"]
+  "keywords": ["output-style", "eli5", "plain-language", "asd-ste100", "simplified-technical-english", "controlled-language", "vonnegut", "writing"]
 }

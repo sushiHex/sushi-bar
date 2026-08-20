@@ -14,6 +14,7 @@ Then pick one in **`/config` → Output style**:
 | `prose:ELI5` | Plain language, everyday analogies, every technical term defined on first use |
 | `prose:ASD-STE100` | Simplified Technical English — short sentences, active voice, one instruction per sentence |
 | `prose:STELI5` | Both: ELI5's explaining, under STE's sentence discipline |
+| `prose:VONNEGUT` | Tiny chapters, a homely analogy beside every mechanism, subject-verb-object sentences |
 
 Set it in `settings.json` instead if you prefer:
 
@@ -95,6 +96,43 @@ probe:
 It inherits the discipline — zero sentences over 35 words where ELI5 had three,
 and `>25w` down from 11 to 2 — while writing *more* than ASD-STE100, which is
 the point: it explains.
+
+## 📚 VONNEGUT
+
+Three techniques, from three books, chosen so they do not fight each other. It
+borrows *method*, never his prose, and it does not quote him.
+
+| From | What it takes |
+|---|---|
+| **Cat's Cradle** | Structure — tiny self-contained chapters, and an ordinary object standing beside every idea |
+| **Welcome to the Monkey House** | The sentence — subject, verb, object. No semicolons |
+| **Breakfast of Champions** | The picture — crude on purpose, never slick |
+
+Two adaptations are deliberate, because the source advice was written for a
+printed guide and this writes into a terminal. **Felt-tip drawings become plain
+ASCII sketches** — six lines, not sixty, and only when a sentence would not be
+clearer. **"100+ tiny chapters" does not mean chopping a two-line answer into
+three**; a short answer is already one chapter.
+
+The real hazard is the voice. A weary narrator slides easily into shrugging at
+a failure, so the style forbids it by name: never shrug at a real bug, never
+hedge to sound relaxed, never let a joke replace a fact, never be folksy about
+risk. Two of his signature devices are also left out — a recurring catchphrase
+used as punctuation, and the tangents of his later novels. Both are wonderful in
+fiction and both wreck a technical answer.
+
+Measured, 4 reps, same probe as the others:
+
+| | words | median sentence | longest | >25w | >35w |
+|---|---|---|---|---|---|
+| control | 239–373 | 12–22 | 31–35 | 12 | 0 |
+| STELI5 | 207–333 | 7–12 | 24–30 | 4 | 0 |
+| **VONNEGUT** | 262–470 | **7–10** | **20–25** | **0** | **0** |
+
+The tightest sentences of the four. It also writes the most, because the chapter
+structure adds real content rather than padding — in testing it built a
+reproduction workspace, ran it, and reported that `ERR_PNPM_NO_SCRIPT` versus
+`ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT` tells you whether a deploy used `--filter`.
 
 ## How these were built
 
