@@ -35,6 +35,11 @@ CYAN, GREY, WHITE, GREEN, YELLOW, RED, MAGENTA, BLUE = (
     "96", "90", "97", "92", "93", "91", "95", "94",
 )
 MODEL_GRAY = "38;5;245"  # medium gray, matching Claude Code's dim hint text (e.g. "(shift+tab to cycle)")
+# Ultracode's own colour in Claude Code's dark themes, rgb(175,135,255) — the
+# nearest 256-colour cell. It reads as a mode, not another dim attribute, which
+# is the point: ultracode is the one effort setting that changes what the
+# session does rather than only how hard it thinks.
+ULTRA = "38;5;141"
 LGRAY = "37"  # light gray — the context %, one step below bright white
 
 
@@ -144,8 +149,64 @@ def quota_seg(window: dict) -> str:
     return c(sev_color(pct), f"{int(round(pct))}%") + c(GREY, tail)
 
 
+def settings_ultracode(cwd: str) -> bool:
+    """Whether a settings file in force for `cwd` enables ultracode.
+
+    Claude Code's own precedence: project-local overrides project, which
+    overrides user. The first file that *mentions* the key decides — absent is
+    not the same as false, or an unrelated project settings.json would veto the
+    user's setting.
+    """
+    candidates = (
+        os.path.join(cwd, ".claude", "settings.local.json"),
+        os.path.join(cwd, ".claude", "settings.json"),
+        os.path.join(os.path.expanduser("~"), ".claude", "settings.json"),
+    )
+    for path in candidates:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                value = json.load(fh).get("ultracode")
+        except Exception:
+            # Unreadable or malformed settings must not take the whole line
+            # down; a status line that raises leaves no bar at all.
+            continue
+        if isinstance(value, bool):
+            return value
+    return False
+
+
+def ultracode_active(effort: str, cwd: str) -> bool:
+    """Whether this session is running ultracode rather than plain xhigh.
+
+    Claude Code sends no ultracode field to a status line, and an interactive
+    toggle is never written to disk, so this is inference from what *is*
+    reachable. Two things make it honest rather than a guess:
+
+    Ultracode forces effort to xhigh, so any other level rules it out outright
+    — which is what catches a settings file left saying `true` after the
+    session was switched to a lower level.
+
+    CLAUDE_CODE_EFFORT_LEVEL overrides effort for the whole session and is
+    inherited by this process, so when it is set it is the answer, and a
+    settings file disagreeing with it is not in force.
+
+    The gap that remains: switching from ultracode to plain xhigh with a
+    settings file still saying true reads as ultracode. Nothing observable
+    distinguishes those two.
+    """
+    if effort != "xhigh":
+        return False
+    env = (os.environ.get("CLAUDE_CODE_EFFORT_LEVEL") or "").strip().lower()
+    if env:
+        return env == "ultracode"
+    return settings_ultracode(cwd)
+
+
 def main() -> None:
-    d = read_json()
+    render(read_json())
+
+
+def render(d: dict) -> None:
     ws = d.get("workspace") or {}
     cwd = ws.get("current_dir") or d.get("cwd") or os.getcwd()
 
@@ -158,6 +219,12 @@ def main() -> None:
     # support it (absent on Opus 4.0/4.1, Sonnet 4.x, Haiku 4.5, claude-3-*), so it
     # simply drops out rather than rendering a misleading default.
     effort = str((d.get("effort") or {}).get("level") or "").strip()
+    # Ultracode is xhigh plus standing workflow orchestration, and it reaches
+    # here only as "xhigh" — there is no field for it. See ultracode_active for
+    # what the name is inferred from and where that inference stops.
+    ultra = ultracode_active(effort, cwd)
+    if ultra:
+        effort = "ultracode"
     # Fast mode is a toggle (/fast) — shown only while it's on, never as "off".
     fast = bool(d.get("fast_mode"))
     # Output style reshapes every reply, so it belongs next to effort. "default"
@@ -193,8 +260,13 @@ def main() -> None:
         # session still renders just the model.
         seg = c(MODEL_GRAY, model) if model else ""
         for extra in (effort, FAST if fast else "", style):
-            if extra:
-                seg = f"{seg} {c(GREY, extra)}" if seg else c(GREY, extra)
+            if not extra:
+                continue
+            # Ultracode reports itself as xhigh, since it *is* xhigh plus
+            # standing workflow orchestration. Naming it takes its own colour:
+            # the same one Claude Code gives it in its top-right indicator.
+            colour = ULTRA if extra is effort and ultra else GREY
+            seg = f"{seg} {c(colour, extra)}" if seg else c(colour, extra)
         segs.append(seg)
 
     if ctx is not None:

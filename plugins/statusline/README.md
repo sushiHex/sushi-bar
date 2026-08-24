@@ -9,7 +9,7 @@ A richer Claude Code status line, in one row:
 | Segment | Shows |
 |---|---|
 | `⎇ master` | git branch (preceded by the session name only when it differs from the dir) |
-| `Opus 4.8 high` | current model + reasoning effort (`low`/`medium`/`high`/`xhigh`/`max`), plus `⚡fast` while fast mode is on |
+| `Opus 4.8 high` | current model + reasoning effort (`low`/`medium`/`high`/`xhigh`/`max`), shown as purple `ultracode` when that is active, plus `⚡fast` while fast mode is on |
 | `Opus 4.8 high STELI5` | …and the active output style, when one is set. `default` earns no slot; a plugin style (`prose:STELI5`) shows just the leaf |
 | `128k ▒▒░░░░░░ 1M` | context window: tokens used · a dithered gray gauge · capacity (derived from the window size for every model) |
 | `⧗ 7% 4h · 86% 2d` | subscription usage limits: 5-hour & 7-day, each % used + time-to-reset (green → yellow → red) |
@@ -47,6 +47,17 @@ Remove it (restores your previous status line if there was one):
 - **Reasoning effort shows only for models that have it.** Claude Code omits it for Opus 4.0/4.1,
   Sonnet 4.x, Haiku 4.5 and claude-3-*, so the segment drops out rather than showing a made-up
   default. **`⚡fast` appears only while fast mode is on** — nothing is added when it's off.
+- **`ultracode` is shown in purple in place of `xhigh`**, matching the colour Claude Code gives
+  it in its own top-right indicator. Ultracode *is* xhigh plus standing workflow orchestration,
+  and Claude Code sends no field for it — the status-line input has no such key, and an
+  interactive toggle is never written to disk. So it is inferred from two things that are
+  reachable: `CLAUDE_CODE_EFFORT_LEVEL=ultracode` in the environment, which this process
+  inherits and which overrides effort for the whole session, or `"ultracode": true` in the
+  settings files in force (local → project → user). Either way it is only claimed when the
+  reported effort is `xhigh`, since ultracode forces that — so switching to a lower level
+  clears the label even if a settings file still says otherwise. The one gap: switching from
+  ultracode to plain `xhigh` with a settings file still saying `true` keeps reading as
+  ultracode, because nothing observable separates those two.
 - A plugin can't contribute a main status line directly, so `/statusline:install` is how it gets
   wired in. After you **update** the plugin, re-run `/statusline:install` to refresh the path.
 - Git branch is read straight from `.git/HEAD` — no `git` process spawned per render.
