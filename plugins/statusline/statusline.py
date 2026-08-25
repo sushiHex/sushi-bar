@@ -149,6 +149,99 @@ def quota_seg(window: dict) -> str:
     return c(sev_color(pct), f"{int(round(pct))}%") + c(GREY, tail)
 
 
+# Where the last-seen effort level and transcript offset are remembered, so a
+# transcript that reaches tens of megabytes is read once and then only appended
+# to. Beside the status line's own plugin data rather than in the project.
+_EFFORT_CACHE = os.path.join(
+    os.path.expanduser("~"), ".claude", "sushi-bar-effort.json"
+)
+
+_EFFORT_MARK = "<local-command-stdout>Set effort level to "
+_EFFORT_MARK_B = _EFFORT_MARK.encode("utf-8")
+
+
+def _scan_effort(raw: bytes, offset: int, fallback: str) -> tuple[str, int]:
+    """Scan appended bytes, returning (level, new_offset).
+
+    Bytes rather than text: the offset is a byte position, and reading in text
+    mode on Windows collapses CRLF to LF, so len(text) is short of the real
+    offset and the next read starts mid-record.
+
+    A record counts only when it is a `user` record whose `message.content` is
+    a STRING. `/effort` writes its output that way; a tool result carries a
+    LIST of blocks and an assistant turn is not a user record. Without both
+    checks the bar reads its own output back - grepping a transcript for this
+    marker puts the marker in that transcript.
+    """
+    level = fallback
+    lines = raw.split(b"\n")
+    # A final line with no newline is a record still being written; leave it
+    # for the next pass rather than parsing half of it.
+    remainder = lines.pop() if lines else b""
+    for line in lines:
+        if _EFFORT_MARK_B not in line:
+            continue
+        try:
+            rec = json.loads(line.decode("utf-8", "replace"))
+        except Exception:
+            continue
+        if rec.get("type") != "user":
+            continue
+        message = rec.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str) and content.startswith(_EFFORT_MARK):
+            level = content[len(_EFFORT_MARK):].split()[0].strip(":,.")
+    return level, offset + len(raw) - len(remainder)
+
+
+def transcript_effort(path: str) -> str:
+    """The effort level last chosen with `/effort` in this session, or "".
+
+    This is the only observable that tracks an interactive toggle. Claude Code
+    sends no ultracode field to a status line and never writes the setting to
+    disk, but the command's own output is persisted to the transcript, and the
+    last one is what the session is running.
+    """
+    if not path:
+        return ""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return ""
+
+    cached = {}
+    try:
+        with open(_EFFORT_CACHE, encoding="utf-8") as fh:
+            cached = json.load(fh)
+    except Exception:
+        pass
+
+    offset, level = 0, ""
+    if cached.get("path") == path and isinstance(cached.get("offset"), int):
+        # A file that shrank is a different session or a rewritten one; reading
+        # from the old offset would return whatever bytes now sit there.
+        if cached["offset"] <= size:
+            offset = cached["offset"]
+            level = str(cached.get("level") or "")
+
+    if offset == size and level:
+        return level
+
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(offset)
+            level, offset = _scan_effort(fh.read(), offset, level)
+    except OSError:
+        return level
+
+    try:
+        with open(_EFFORT_CACHE, "w", encoding="utf-8") as fh:
+            json.dump({"path": path, "offset": offset, "level": level}, fh)
+    except OSError:
+        pass  # the read still stands; only the next one pays for it again
+    return level
+
+
 def settings_ultracode(cwd: str) -> bool:
     """Whether a settings file in force for `cwd` enables ultracode.
 
@@ -175,7 +268,7 @@ def settings_ultracode(cwd: str) -> bool:
     return False
 
 
-def ultracode_active(effort: str, cwd: str) -> bool:
+def ultracode_active(effort: str, cwd: str, transcript: str = "") -> bool:
     """Whether this session is running ultracode rather than plain xhigh.
 
     Claude Code sends no ultracode field to a status line, and an interactive
@@ -196,6 +289,12 @@ def ultracode_active(effort: str, cwd: str) -> bool:
     """
     if effort != "xhigh":
         return False
+    # The transcript first: `/effort` is how ultracode actually gets turned on,
+    # and its output is the only trace that toggle leaves anywhere. A settings
+    # file can therefore only ever be staler than this.
+    chosen = transcript_effort(transcript)
+    if chosen:
+        return chosen == "ultracode"
     env = (os.environ.get("CLAUDE_CODE_EFFORT_LEVEL") or "").strip().lower()
     if env:
         return env == "ultracode"
@@ -222,7 +321,7 @@ def render(d: dict) -> None:
     # Ultracode is xhigh plus standing workflow orchestration, and it reaches
     # here only as "xhigh" — there is no field for it. See ultracode_active for
     # what the name is inferred from and where that inference stops.
-    ultra = ultracode_active(effort, cwd)
+    ultra = ultracode_active(effort, cwd, str(d.get("transcript_path") or ""))
     if ultra:
         effort = "ultracode"
     # Fast mode is a toggle (/fast) — shown only while it's on, never as "off".

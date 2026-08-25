@@ -49,15 +49,32 @@ Remove it (restores your previous status line if there was one):
   default. **`⚡fast` appears only while fast mode is on** — nothing is added when it's off.
 - **`ultracode` is shown in purple in place of `xhigh`**, matching the colour Claude Code gives
   it in its own top-right indicator. Ultracode *is* xhigh plus standing workflow orchestration,
-  and Claude Code sends no field for it — the status-line input has no such key, and an
-  interactive toggle is never written to disk. So it is inferred from two things that are
-  reachable: `CLAUDE_CODE_EFFORT_LEVEL=ultracode` in the environment, which this process
-  inherits and which overrides effort for the whole session, or `"ultracode": true` in the
-  settings files in force (local → project → user). Either way it is only claimed when the
-  reported effort is `xhigh`, since ultracode forces that — so switching to a lower level
-  clears the label even if a settings file still says otherwise. The one gap: switching from
-  ultracode to plain `xhigh` with a settings file still saying `true` keeps reading as
-  ultracode, because nothing observable separates those two.
+  so it arrives here only as `xhigh` — the status-line input carries no field for it, and
+  `/effort ultracode` is session-only and writes nothing to settings.
+
+  It is read from the **session transcript** instead. `/effort` prints its result, and that
+  output is persisted as a plain user record:
+
+  ```
+  {"type":"user","message":{"role":"user",
+   "content":"<local-command-stdout>Set effort level to ultracode ..."}}
+  ```
+
+  The last such record is what the session is running, so an interactive toggle is tracked —
+  the case that matters, since it is how ultracode actually gets turned on. A record counts
+  only when it is a `user` record whose `content` is a **string**: a tool result carries a
+  *list* of blocks, and without that check the bar reads its own output back the moment
+  anything greps the transcript for this marker.
+
+  The transcript can reach tens of megabytes and this runs on every render, so the byte offset
+  and last value are cached in `~/.claude/sushi-bar-effort.json` and only appended bytes are
+  scanned — about 0.1s once, then ~2ms. A file that shrank is re-read from the start, since it
+  is a different session or a rewritten one.
+
+  Falls back to `CLAUDE_CODE_EFFORT_LEVEL=ultracode` in the environment, then `"ultracode": true`
+  in the settings files in force (local → project → user), for sessions where `/effort` was
+  never used. All three are gated on the reported effort being `xhigh`, since ultracode forces
+  that.
 - A plugin can't contribute a main status line directly, so `/statusline:install` is how it gets
   wired in. After you **update** the plugin, re-run `/statusline:install` to refresh the path.
 - Git branch is read straight from `.git/HEAD` — no `git` process spawned per render.
