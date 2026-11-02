@@ -18,11 +18,11 @@ Ask Claude for a "whole-codebase ultrareview" and the skill takes over. You can 
 - Each session commits its findings as JSONL to a branch and pushes it. The Claude GitHub App needs write access to the repo.
 - `cloud-fetch` pulls those branches, validates every line, and merges them into one `findings.jsonl`.
 
-Measured on a 40,800-line Python codebase: about $21 for all 7 slices, done within about 20 minutes.
+One measured example, a 40,800-line Python codebase in November 2026: about $21 for all 7 slices, done within about 20 minutes. Your costs will vary.
 
 ## Commands
 
-All in `skills/ultrareview-slice/build_slices.py`, which needs Python 3.9+ and git 2.31+:
+All in `skills/ultrareview-slice/build_slices.py`. It needs Python 3.9+ and git 2.31+, and `launch` needs Claude Code 2.1.309+ (for `--trust-workspace`, which you pass yourself):
 
 | Command | Does |
 |---|---|

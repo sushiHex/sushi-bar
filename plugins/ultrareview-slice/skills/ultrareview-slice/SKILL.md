@@ -41,9 +41,11 @@ skill. They need Python 3.9+ and git 2.31+; nothing else.
     "groups": [["src/server.py", "tests/test_server.py"], ["src/auth/", "tests/auth/"]]}
    ```
 
-   - A group is a module with its tests, so one run sees both. List groups in risk
-     order; every file in no group follows, one by one, so docs and leftovers are still
-     covered.
+   - A group is a module with its tests, so one run sees both. Its entries are
+     repo-relative files or directories (everything under one); `exclude` entries are
+     case-sensitive globs. List groups in risk order; every file in no group follows,
+     one by one, so docs and leftovers are still covered. Submodules and files whose
+     names hold a line break can't be reviewed and are listed as excluded.
    - Exclude data the reviewer can't usefully read (generated files, lockfiles,
      fixtures, catalogs of test cases) and frozen code `--fix` must not edit. The build
      prints each exclusion pattern with its file count; nothing is dropped silently.
@@ -53,23 +55,31 @@ skill. They need Python 3.9+ and git 2.31+; nothing else.
    build --repo <repo> --plan <plan> --dry-run`. Groups pack whole, in order; a group
    over the budget is split file by file, with a warning; a single file over it stops
    the build. Reorder or regroup until the slices make sense.
-3. **Build:** the same command without `--dry-run`. It creates `<repo>-ultra-N` on
-   `ultra/slice-N` (base `ultra/base-N`) per slice, checks that every slice's tree equals
-   the base ref, writes a manifest to `<git-common-dir>/ultra-slices.json`, and prints
-   one command per slice.
+3. **Build:** the same command without `--dry-run`. It refuses if any worktree or
+   branch it would create already exists, then creates `<repo>-ultra-N` on
+   `ultra/slice-N` (base `ultra/base-N`) per slice. Repo hooks are disabled for this
+   scaffolding. It checks that every slice's tree equals the base ref, and records each
+   slice in `<git-common-dir>/ultra-slices.json` as it goes, so `clean` can undo even a
+   build that failed halfway. It prints one command per slice.
 4. **Hand the user the launch.** Ultrareview bills usage credits (3 free runs per
    account, then roughly $5-25 a review), so state the count and the cost. The user
    runs it; Claude never does, not even through this script:
 
    ```
-   ! python -I -B <skill dir>/build_slices.py launch --repo <repo>
+   ! python -I -B <skill dir>/build_slices.py launch --repo <repo> --trust-workspace
    ```
 
    It runs `claude ultrareview <base-N> --json --trust-workspace` in every slice
-   worktree at once (`--jobs N` to limit, `--slices 1,3` to choose, `--dry-run` to
-   print the commands), waits for each (45 minutes by default), and saves the findings
-   to `<git-common-dir>/ultra-findings/slice-N.json`, with stderr beside them as `.log`.
-   Slices that already have findings are skipped unless `--rerun`. With the free runs
+   worktree at once (`--jobs N` to limit, `--slices 1,3-5` to choose, `--dry-run` to
+   print the commands). It waits for each, 45 minutes by default, and saves the
+   findings to `<git-common-dir>/ultra-findings/<build>/slice-N.json`, with stderr
+   beside them as `.log`.
+   - **`--trust-workspace` is required, and it's the user's call.** It trusts the
+     worktrees, which hold the repo's own git config and project settings; those can
+     run programs. It needs Claude Code 2.1.309 or later.
+   - **Every launch is recorded before it starts,** and a slice launched before is
+     skipped whatever happened to it, unless `--rerun`. A failed review may still be
+     running, and a rerun bills a new one. With the free runs
    used and usage credits off, every run refuses within seconds ("Free ultrareviews
    used. Turn on usage credits to continue."), bills nothing, and leaves only a log:
    turn credits on at https://claude.ai/settings/usage and launch again. Not
@@ -81,18 +91,26 @@ skill. They need Python 3.9+ and git 2.31+; nothing else.
    nothing fixed unverified.
 
    *Alternative:* the user runs each slice interactively with `--fix` (the commands
-   `build` printed; each shows a cost dialog), then `collect`: Every slice tree equals the
-   base, so each worktree's `--fix` edits (uncommitted or committed, new files
-   included) are a patch against the base. It saves them to
-   `<git-common-dir>/ultra-patches/`, names any file two slices edited, and applies
-   them onto `ultra/fixes` in `<repo>-ultra-fixes`, one commit per slice, without the
-   scaffolding commits. A patch that doesn't apply stops it: resolve there, commit,
-   rerun.
+   `build` printed; each shows a cost dialog), then `collect`.
+   - **What it collects:** every slice tree equals the base, so each worktree's
+     `--fix` edits (uncommitted or committed, new files included) are a byte-exact
+     patch against the base.
+   - **What it does with them:** it saves them to `<git-common-dir>/ultra-patches/`,
+     names any file two slices edited, and applies them onto `ultra/fixes` in
+     `<repo>-ultra-fixes`, one commit per slice, without the scaffolding commits.
+   - **Safety:** it uses only a fixes worktree this build created, and only while that
+     worktree is clean and on its branch. It records each slice as it lands, so a rerun
+     resumes where it stopped.
+   - **On a conflict:** a patch that doesn't apply stops it. Resolve the conflict in the
+     fixes worktree, commit, then run `collect --resolved N` to record that slice and
+     apply the rest.
 6. **Verify, then PR.** Treat every fix as a claim: check it against source, run the
    tests, mutation-test what the project requires, and open a normal PR.
 7. **Clean:** `build_slices.py clean --repo <repo>` removes the slice worktrees and
-   branches and the manifest; it refuses a slice with uncollected edits unless
-   `--force`. The fixes worktree is kept.
+   branches and the manifest. It refuses, unless `--force`, a slice whose edits
+   differ from what `collect` took, including edits made after collection, and a
+   worktree no longer on its slice branch. Findings, patches and the fixes worktree
+   are kept. Gitignored files in a slice worktree aren't checked and are lost.
 
 ## Whole codebase on cloud-session credit (no ultrareview)
 
@@ -100,10 +118,11 @@ Ultrareview bills usage credits only. A cloud-session bonus credit (or plan usag
 pays for ordinary `claude --cloud` sessions instead, so this mode runs the review
 itself as cloud sessions, one per slice, using the same plan and partition. The
 8,000-line cap belongs to ultrareview, but slices still keep each session focused.
-Measured on hardline-mcp: $2 for a 1,000-line slice, $4 for a 5,700-line one
-(about 6 minutes), and about $21 for the whole codebase in 7 slices (40,800 lines,
-all done within about 20 minutes): roughly $0.50 per 1,000 lines, plus a dollar or
-two fixed per session. Fewer, larger slices are cheaper. Estimate it and tell the
+One measured example, hardline-mcp in November 2026 with the default cloud model: $2
+for a 1,000-line slice, $4 for a 5,700-line one (about 6 minutes), and about $21 for
+the whole codebase in 7 slices (40,800 lines, all done within about 20 minutes).
+That's roughly $0.50 per 1,000 lines, plus a dollar or two fixed per session. Your
+costs will vary with the model, the brief and the code. Fewer, larger slices are cheaper. Estimate it and tell the
 user before launching. Get their go: it spends
 their credit.
 
@@ -122,13 +141,21 @@ their credit.
      method, so findings are demonstrated, not asserted.
    - Attack, don't validate; skip style; edit nothing but the findings file.
 2. **Dry run:** `build_slices.py cloud --repo <repo> --plan <plan> --brief <brief>
-   --cwd <clean checkout at the base ref> --dry-run` prints slice 1's full prompt.
-   `--cwd` must be clean and at the base commit, since a session may upload it.
+   --cwd <clean checkout at the base ref> --dry-run` prints slice 1's full prompt. It
+   refuses to go further unless:
+   - **`--cwd` is clean, at the base commit and has the same `origin`,** because a
+     session may upload it;
+   - **the repo has an `origin`,** because sessions push there and `cloud-fetch` reads
+     from it;
+   - **the run name is a simple name:** letters, digits, `.`, `_`, `-`;
+   - **every prompt fits Windows' 32,767-character command line.**
 3. **Launch:** the same without `--dry-run` (`--slices 1` to test one first). Each
    session gets its own hidden console (through `conhost.exe`, since Windows Terminal
    ignores "hidden"), because `--cloud` needs a terminal, not a visible one. The
    console exits once the session exists, and the session runs in the cloud.
-   `--visible` shows the consoles, to read a launch error. Each is told to
+   `--visible` shows the consoles, to read a launch error. `run.json` records each
+   session before it's spawned, so none goes untracked; the slice list goes into the
+   prompt fenced as data. Each is told to
    commit only `research/<run>/slice-N.jsonl` on `review/<run>/slice-N` and push.
    Pushing needs the Claude GitHub App with write access on the repo. The script, not
    the brief, fixes the JSONL format: `{"kind": "finding", "severity", "file", "line",
@@ -136,20 +163,25 @@ their credit.
    "summary"}`. The CLI's own JSON options (`--output-format`, `--json-schema`) work
    only with `--print`, which runs locally and ignores `--cloud`.
 4. **Fetch:** `build_slices.py cloud-fetch --repo <repo> --run <run>` fetches the
-   `review/<run>/*` branches, checks every line against the format (naming malformed
-   ones by slice and line), and writes the per-slice files plus one merged
+   `review/<run>/*` branches. It checks every line against the full format: fields,
+   types and severity. Malformed lines are named by slice and line and left out, and
+   an empty file counts as a problem. It exits 1 while anything is missing or
+   malformed. It writes the per-slice files plus one merged
    `findings.jsonl`, sorted by severity and tagged with each record's slice, to
    `<git-common-dir>/ultra-cloud/<run>/`. `--wait N` polls every minute for up to N
-   minutes until every slice has pushed (run it in the background); it names the slices
-   still missing. The sessions themselves are at claude.ai/code. A run grows: launch
-   one slice to measure, then `--run <same run> --slices 2-7` adds the rest to the
-   same run and the same `findings.jsonl`. It refuses a slice the run already
-   launched, and refuses a different base commit.
+   minutes until every slice's findings file is there (run it in the background); it
+   names the slices still missing. The sessions themselves are at claude.ai/code. A
+   run grows: launch one slice to measure, then `--run <same run> --slices 2-7` adds
+   the rest to the same run and the same `findings.jsonl`. It refuses a slice the run
+   already launched, a different base commit, and a plan that now partitions
+   differently from the run's earlier slices.
 5. **Verify** every finding against source before reporting or fixing. Then delete
    the `review/<run>/*` branches on origin, once the user agrees.
 
-Non-Windows: the launch can't open consoles. Run each prompt (`--dry-run` shows
-them) with `claude --cloud` in a terminal.
+Non-Windows: the launch can't open consoles of its own. It writes each prompt to
+`<git-common-dir>/ultra-cloud/<run>/prompt-slice-N.txt`, records the run and prints
+one `claude --cloud "$(cat …)"` per slice for the user to run. `cloud-fetch` then
+works as usual.
 
 ## One slice
 

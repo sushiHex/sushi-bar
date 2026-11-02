@@ -13,9 +13,15 @@ import tempfile
 from pathlib import Path
 
 
+_NO_HOOKS = tempfile.mkdtemp(prefix="ultra-no-hooks-")
+
+
 def git(cwd: Path, *args: str, capture: bool = True) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, stdin=subprocess.DEVNULL,
-                            capture_output=capture, text=True, check=False)
+    # No hooks (they would run on the synthetic checkout and commits), literal
+    # pathspecs (file names are names, not patterns), UTF-8 whatever the locale.
+    result = subprocess.run(["git", "-c", f"core.hooksPath={_NO_HOOKS}", "--literal-pathspecs", *args],
+                            cwd=cwd, stdin=subprocess.DEVNULL, capture_output=capture,
+                            text=True, encoding="utf-8", check=False)
     if result.returncode != 0:
         sys.exit(f"git {' '.join(args)} failed: {(result.stderr or '').strip()}")
     return result.stdout if capture else ""
@@ -79,16 +85,19 @@ def main() -> None:
     if not chosen:
         sys.exit("no file fits under the cap")
 
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="\n",
-                                     suffix=".txt", delete=False) as spec:
-        spec.write("\n".join(chosen) + "\n")
+    original = git(worktree, "rev-parse", "HEAD").strip()
+    with tempfile.NamedTemporaryFile("wb", suffix=".nul", delete=False) as spec:
+        spec.write(b"\0".join(p.encode("utf-8") for p in chosen) + b"\0")
     try:
-        git(worktree, "rm", "-q", "--cached", f"--pathspec-from-file={spec.name}")
-        git(worktree, "commit", "-q", "-m",
+        git(worktree, "rm", "-q", "--cached", f"--pathspec-from-file={spec.name}", "--pathspec-file-nul")
+        git(worktree, "commit", "-q", "--no-verify", "-m",
             "audit base: slice withheld (local review scaffolding, never push)")
         base = git(worktree, "rev-parse", "HEAD").strip()
-        git(worktree, "add", f"--pathspec-from-file={spec.name}")
-        git(worktree, "commit", "-q", "-m", f"audit slice: {len(chosen)} files, {lines} lines")
+        # The original index entries, straight from the commit: no filters, and
+        # tracked-but-ignored files come back too.
+        git(worktree, "restore", f"--source={original}", "--staged",
+            f"--pathspec-from-file={spec.name}", "--pathspec-file-nul")
+        git(worktree, "commit", "-q", "--no-verify", "-m", f"audit slice: {len(chosen)} files, {lines} lines")
     finally:
         Path(spec.name).unlink(missing_ok=True)
 
@@ -101,7 +110,7 @@ def main() -> None:
     print(f"base: {base}")
     for name in chosen:
         print(f"  {name}")
-    print(f'\ncd {worktree}; claude "/code-review ultra --fix --max-findings all {base}"')
+    print(f'\ncd "{worktree}"; claude "/code-review ultra --fix --max-findings all {base}"')
 
 
 if __name__ == "__main__":
