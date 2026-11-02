@@ -101,13 +101,13 @@ skill. They need Python 3.9+ and git 2.31+; nothing else.
    - **Safety:** it uses only a fixes worktree this build created, and only while that
      worktree is clean and on its branch. If the fixes branch name is taken by an
      earlier run, pass `--branch`.
-   - **After each slice lands:** the same edits are committed on that slice's own
-     branch. Anything the worktree holds afterwards is new, and the next `collect`
-     applies it as a patch on top.
+   - **Snapshots first:** each slice's edits are first committed on its own branch.
+     That snapshot is the exact unit applied, so an edit made while `collect` runs
+     stays pending for the next `collect`, never absorbed. Each apply is journaled
+     first, so a crash is resumed on rerun, not replayed.
    - **On a conflict:** a patch that doesn't apply stops it. Resolve the conflict in the
-     fixes worktree, commit, then run `collect --resolved N`. It refuses until a
-     resolution is committed and while that slice's worktree has changed since its
-     patch was saved.
+     fixes worktree, commit, then run `collect --resolved N`. It refuses until the
+     fixes branch has a new commit on top of where the conflict began.
 6. **Verify, then PR.** Treat every fix as a claim: check it against source, run the
    tests, mutation-test what the project requires, and open a normal PR.
 7. **Clean:** `build_slices.py clean --repo <repo>` removes the slice worktrees and

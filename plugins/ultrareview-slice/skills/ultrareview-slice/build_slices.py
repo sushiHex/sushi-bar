@@ -46,7 +46,6 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import hashlib
 import json
 import os
 import re
@@ -299,7 +298,7 @@ def build(args) -> None:
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     manifest = {"repo": str(repo), "commit": commit, "base_ref": base_ref, "prefix": str(prefix),
                 "build": f"{commit[:12]}-{stamp}", "excluded": [e[0] for e in excluded],
-                "slices": [], "fixes": None, "conflict": None}
+                "slices": [], "fixes": None, "landing": None}
     save(manifest_path(repo), manifest)  # journaled per slice, so clean can undo a partial build
     for n, s in enumerate(slices, 1):
         tree_dir = Path(f"{prefix}-{n}")
@@ -426,20 +425,28 @@ def slice_patch(r: dict) -> bytes:
                           capture_output=True, check=True).stdout
 
 
-def touched(r: dict) -> list[str]:
-    out = subprocess.run(["git", "diff", "--no-ext-diff", "--name-only", "-z", r["head"]],
-                         cwd=Path(r["worktree"]), capture_output=True, check=True).stdout
-    return [p.decode("utf-8", "replace") for p in out.split(b"\0") if p]
-
-
-def settle(r: dict) -> None:
-    """Once a slice's edits are committed on the fixes branch, commit them on its own
-    branch too and move its head there: what it holds afterwards is new work, and its
-    next patch applies on top of what was collected."""
+def on_its_branch(r: dict) -> Path:
     tree_dir = Path(r["worktree"])
+    branch = git(tree_dir, "rev-parse", "--abbrev-ref", "HEAD", check=False).strip()
+    if branch != f"ultra/slice-{r['n']}":
+        sys.exit(f"{tree_dir} is on {branch!r}, not ultra/slice-{r['n']}; refusing to collect from it")
+    return tree_dir
+
+
+def snapshot(r: dict) -> str | None:
+    """Commit a slice worktree's edits on its own branch and return that commit: the
+    exact, immutable unit collect applies. Edits made afterwards stay pending."""
+    tree_dir = on_its_branch(r)
     scaffold(tree_dir, "add", "-A")
-    scaffold(tree_dir, "commit", "-q", "--no-verify", "--allow-empty", "-m", "ultra: collected")
-    r["head"] = git(tree_dir, "rev-parse", "HEAD").strip()
+    if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=tree_dir).returncode:
+        scaffold(tree_dir, "commit", "-q", "--no-verify", "-m", "ultra: edits captured for collect")
+    snap = git(tree_dir, "rev-parse", "HEAD").strip()
+    return None if snap == r["head"] else snap
+
+
+def raw_diff(r: dict, snap: str, *extra: str) -> bytes:
+    return subprocess.run(["git", *_RAW_DIFF, *extra, r["head"], snap], cwd=Path(r["worktree"]),
+                          capture_output=True, check=True).stdout
 
 
 def fixes_ready(m: dict) -> Path:
@@ -451,38 +458,52 @@ def fixes_ready(m: dict) -> Path:
     return path
 
 
+def descends(path: Path, older: str, newer: str) -> bool:
+    return older != newer and subprocess.run(
+        ["git", "merge-base", "--is-ancestor", older, newer], cwd=path).returncode == 0
+
+
 def collect(args) -> None:
     repo = toplevel(args.repo)
     m = load(manifest_path(repo))
     out = common_dir(repo) / "ultra-patches"
     out.mkdir(exist_ok=True)
-    held = m.get("conflict")
-    if held:  # a patch that stopped on a conflict: settled only by --resolved, after checks
-        r = next(s for s in m["slices"] if s["n"] == held["n"])
-        if args.resolved != held["n"]:
-            sys.exit(f"slice {held['n']}'s patch stopped on a conflict in {m['fixes']['path']}; "
-                     f"resolve and commit it there, then run collect --resolved {held['n']}")
+    landing = m.get("landing")  # a slice whose patch was being applied when collect stopped
+    if landing:
+        r = next(s for s in m["slices"] if s["n"] == landing["n"])
         path = fixes_ready(m)
-        if git(path, "rev-parse", "HEAD").strip() == held["fixes_head"]:
-            sys.exit(f"nothing committed in {path} since the conflict; commit the resolution first")
-        if hashlib.sha256(slice_patch(r)).hexdigest() != held["patch"]:
-            sys.exit(f"slice {held['n']}'s worktree changed since its patch was saved; "
-                     "collect the difference by hand, then rerun --resolved")
-        settle(r)
-        m["conflict"] = None
+        now = git(path, "rev-parse", "HEAD").strip()
+        landed = (descends(path, landing["fixes_before"], now)
+                  and git(path, "rev-parse", "HEAD^").strip() == landing["fixes_before"]
+                  and git(path, "log", "-1", "--format=%s").strip() == f"ultra slice {r['n']}: review fixes")
+        if landing.get("conflict"):
+            if args.resolved != r["n"]:
+                sys.exit(f"slice {r['n']}'s patch stopped on a conflict in {path}; resolve and "
+                         f"commit it there, then run collect --resolved {r['n']}")
+            if not descends(path, landing["fixes_before"], now):
+                sys.exit(f"{path} has no commit on top of where the conflict began; commit the resolution")
+            landed = True
+        elif args.resolved is not None:
+            sys.exit("no conflict is waiting to be resolved")
+        if landed:
+            r["head"] = landing["snap"]
+            print(f"slice {r['n']}: recorded as collected")
+        elif now != landing["fixes_before"]:
+            sys.exit(f"{path} moved since slice {r['n']} was being applied; check it, then rerun")
+        m["landing"] = None
         save(manifest_path(repo), m)
-        print(f"slice {held['n']}: resolution recorded")
     elif args.resolved is not None:
         sys.exit("no conflict is waiting to be resolved")
     pending, by_file = [], {}
     for r in m["slices"]:
         if not r["head"]:
             continue
-        patch = slice_patch(r)
-        if patch.strip():
-            pending.append((r, patch))
-            for f in touched(r):
-                by_file.setdefault(f, []).append(r["n"])
+        snap = snapshot(r)
+        if snap:
+            pending.append((r, snap))
+            for f in raw_diff(r, snap, "--name-only", "-z").split(b"\0"):
+                if f:
+                    by_file.setdefault(f.decode("utf-8", "replace"), []).append(r["n"])
     if not pending:
         print("no slice has uncollected edits")
         return
@@ -502,21 +523,22 @@ def collect(args) -> None:
         scaffold(repo, "worktree", "add", "-q", "-b", args.branch, str(path), m["commit"])
         fixes = m["fixes"] = {"path": str(path), "branch": args.branch}
         save(manifest_path(repo), m)
-    for r, patch in pending:
+    for r, snap in pending:
         path = fixes_ready(m)
         file = out / f"slice-{r['n']}.patch"
-        file.write_bytes(patch)
-        before = git(path, "rev-parse", "HEAD").strip()
+        file.write_bytes(raw_diff(r, snap))
+        # Journaled before applying: a crash or conflict is resumed, never replayed.
+        m["landing"] = {"n": r["n"], "snap": snap, "fixes_before": git(path, "rev-parse", "HEAD").strip()}
+        save(manifest_path(repo), m)
         result = subprocess.run(["git", "apply", "--3way", "--index", str(file)], cwd=path,
                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode:
-            m["conflict"] = {"n": r["n"], "fixes_head": before,
-                             "patch": hashlib.sha256(patch).hexdigest()}
+            m["landing"]["conflict"] = True
             save(manifest_path(repo), m)
             sys.exit(f"slice {r['n']}'s patch did not apply cleanly in {path}:\n{result.stderr}"
                      f"Resolve it there and commit, then run collect --resolved {r['n']}.")
         scaffold(path, "commit", "-q", "--no-verify", "-m", f"ultra slice {r['n']}: review fixes")
-        settle(r)  # its edits now live in that commit, byte for byte
+        r["head"], m["landing"] = snap, None  # exactly the captured edits, now on the fixes branch
         save(manifest_path(repo), m)
         print(f"slice {r['n']}: applied ({file})")
     print(f"\nfixes on {fixes['branch']} in {fixes['path']}; verify each finding, test, then open a PR")
