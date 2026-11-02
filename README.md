@@ -13,6 +13,7 @@ Small, bite-sized Claude Code tools, by [sushiHex](https://github.com/sushiHex).
 /plugin install snip@sushi-bar
 /plugin install statusline@sushi-bar
 /plugin install prose@sushi-bar
+/plugin install ultrareview-slice@sushi-bar
 ```
 
 Update later with `/plugin marketplace update sushi-bar`.
@@ -24,6 +25,7 @@ Update later with `/plugin marketplace update sushi-bar`.
 | **[snip](plugins/snip)** | Windows | Capture a screenshot straight into your Claude Code session — box, screen, window, or clipboard. |
 | **[statusline](plugins/statusline)** | cross-platform | A richer status line — session · dir · git branch, model + reasoning effort, context bar, and 5h/7d usage-limit trackers. |
 | **[prose](plugins/prose)** | cross-platform | Four selectable output styles — ELI5 plain language, ASD-STE100 Simplified Technical English, STELI5 (both at once), and VONNEGUT (tiny chapters, homely analogies). |
+| **[ultrareview-slice](plugins/ultrareview-slice)** | Windows · cross-platform | A whole-codebase `/code-review ultra`, past its 8,000-line cap: slices in parallel worktrees, or cloud review sessions, with findings collected in one place. |
 
 ### 🖼️ snip
 
@@ -99,6 +101,21 @@ Then pick one in **`/config` → Output style**, or set `"outputStyle": "prose:E
 > **Honest limit:** the ASD-STE100 style applies the *writing rules*. The ~900-word approved dictionary is licensed by the ASD and isn't bundled, so output isn't verified against it — and the style forbids Claude from claiming otherwise.
 
 **Requirements:** none. No dependencies, no scripts.
+
+### 🔍 ultrareview-slice
+
+`/code-review ultra` reviews a diff of at most 500 files and 8,000 lines. This skill makes a **whole codebase** reviewable: it partitions the repo into slices, each module with its tests, gives each slice its own worktree, and runs them in parallel.
+
+- **Ultrareview**, billed to usage credits: one `launch` runs every slice and saves its findings, or run each slice with `--fix` and `collect` merges the edits onto one branch.
+- **Cloud sessions**, billed to cloud-session credit: one `claude --cloud` review per slice pushes JSONL findings to a branch, and `cloud-fetch` validates and merges them. Measured at about $21 for a 40,800-line codebase, done within about 20 minutes.
+
+```
+/plugin install ultrareview-slice@sushi-bar
+```
+
+Then ask Claude for a whole-codebase ultrareview. Billed launches are always yours to start. See [the plugin's README](plugins/ultrareview-slice) for the commands.
+
+**Requirements:** Python 3.9+ · git 2.31+ · Claude Code with `/code-review ultra` or cloud sessions.
 
 ## License
 

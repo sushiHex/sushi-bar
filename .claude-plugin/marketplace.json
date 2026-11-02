@@ -16,14 +16,21 @@
       "name": "statusline",
       "source": "./plugins/statusline",
       "description": "Rich status line: session · git branch, model + reasoning effort + output style, context bar, 5h/7d usage-limit trackers, and dir.",
-      "version": "1.0.7",
+      "version": "1.2.0",
       "author": { "name": "sushiHex" }
     },
     {
       "name": "prose",
       "source": "./plugins/prose",
       "description": "Selectable output styles: ELI5 plain language, ASD-STE100 Simplified Technical English, STELI5 (both at once), and VONNEGUT (tiny chapters, homely analogies). Changes how Claude writes to you, not what it builds.",
-      "version": "1.3.0",
+      "version": "1.4.0",
+      "author": { "name": "sushiHex" }
+    },
+    {
+      "name": "ultrareview-slice",
+      "source": "./plugins/ultrareview-slice",
+      "description": "Review a whole codebase with /code-review ultra past its 500-file / 8,000-line cap: slices with one worktree each, launched in parallel, findings or --fix edits collected onto one branch. Or the same slices as claude --cloud review sessions on cloud credit.",
+      "version": "1.0.0",
       "author": { "name": "sushiHex" }
     }
   ]
