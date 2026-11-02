@@ -99,18 +99,23 @@ skill. They need Python 3.9+ and git 2.31+; nothing else.
      names any file two slices edited, and applies them onto `ultra/fixes` in
      `<repo>-ultra-fixes`, one commit per slice, without the scaffolding commits.
    - **Safety:** it uses only a fixes worktree this build created, and only while that
-     worktree is clean and on its branch. It records each slice as it lands, so a rerun
-     resumes where it stopped.
+     worktree is clean and on its branch. If the fixes branch name is taken by an
+     earlier run, pass `--branch`.
+   - **After each slice lands:** the same edits are committed on that slice's own
+     branch. Anything the worktree holds afterwards is new, and the next `collect`
+     applies it as a patch on top.
    - **On a conflict:** a patch that doesn't apply stops it. Resolve the conflict in the
-     fixes worktree, commit, then run `collect --resolved N` to record that slice and
-     apply the rest.
+     fixes worktree, commit, then run `collect --resolved N`. It refuses until a
+     resolution is committed and while that slice's worktree has changed since its
+     patch was saved.
 6. **Verify, then PR.** Treat every fix as a claim: check it against source, run the
    tests, mutation-test what the project requires, and open a normal PR.
 7. **Clean:** `build_slices.py clean --repo <repo>` removes the slice worktrees and
-   branches and the manifest. It refuses, unless `--force`, a slice whose edits
-   differ from what `collect` took, including edits made after collection, and a
-   worktree no longer on its slice branch. Findings, patches and the fixes worktree
-   are kept. Gitignored files in a slice worktree aren't checked and are lost.
+   branches and the manifest. It checks every slice before removing any, and refuses,
+   unless `--force`, while a slice worktree holds edits not collected, never finished
+   building, or is no longer on its slice branch. Findings, patches and the fixes
+   worktree are kept. Gitignored files in a slice worktree aren't checked and are
+   lost.
 
 ## Whole codebase on cloud-session credit (no ultrareview)
 

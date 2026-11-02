@@ -25,11 +25,12 @@ running, and a retry is billed again.
 
 collect: each slice tree equals the base ref, so whatever --fix left in a
 worktree is a patch that applies to the base. Applies them onto one branch off
-the base ref (worktree P-fixes), a commit per slice, recording each as it
-lands, so a rerun resumes after a conflict.
+the base ref (worktree P-fixes), a commit per slice, then commits the same
+edits on the slice's own branch: whatever a worktree holds afterwards is new,
+and the next collect takes it as a patch on top.
 
-clean: removes the slice worktrees and branches; refuses a slice with edits not
-collected as they now stand, unless --force. Never pushes anything.
+clean: removes the slice worktrees and branches; refuses, unless --force, while
+any slice worktree holds edits or never finished building. Never pushes.
 
 cloud / cloud-fetch: the same slices as `claude --cloud` review sessions. Each
 commits JSONL findings to review/<run>/slice-N and pushes it; cloud-fetch
@@ -66,12 +67,17 @@ def git(cwd: Path, *args: str, check: bool = True) -> str:
 _NO_HOOKS: list[str] = []
 
 
-def scaffold(cwd: Path, *args: str) -> str:
-    """git for the scaffolding: no hooks (a repo's hooks would run on synthetic
-    checkouts and commits), and pathspecs taken literally."""
+def no_hooks() -> list[str]:
+    """git options that disable a repo's hooks: they would otherwise run on the
+    synthetic checkouts, commits and branch deletions of the scaffolding."""
     if not _NO_HOOKS:
         _NO_HOOKS.append(tempfile.mkdtemp(prefix="ultra-no-hooks-"))
-    return git(cwd, "-c", f"core.hooksPath={_NO_HOOKS[0]}", "--literal-pathspecs", *args)
+    return ["-c", f"core.hooksPath={_NO_HOOKS[0]}"]
+
+
+def scaffold(cwd: Path, *args: str) -> str:
+    """git for the scaffolding: no hooks, and pathspecs taken literally."""
+    return git(cwd, *no_hooks(), "--literal-pathspecs", *args)
 
 
 def toplevel(repo: Path) -> Path:
@@ -293,15 +299,15 @@ def build(args) -> None:
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     manifest = {"repo": str(repo), "commit": commit, "base_ref": base_ref, "prefix": str(prefix),
                 "build": f"{commit[:12]}-{stamp}", "excluded": [e[0] for e in excluded],
-                "slices": [], "fixes": None}
+                "slices": [], "fixes": None, "conflict": None}
     save(manifest_path(repo), manifest)  # journaled per slice, so clean can undo a partial build
     for n, s in enumerate(slices, 1):
         tree_dir = Path(f"{prefix}-{n}")
-        scaffold(repo, "worktree", "add", "-q", "-b", f"ultra/slice-{n}", str(tree_dir), commit)
         record = {"n": n, "worktree": str(tree_dir), "base": None, "head": None,
-                  "files": s["files"], "lines": s["lines"], "collected": None}
+                  "files": s["files"], "lines": s["lines"]}
         manifest["slices"].append(record)
-        save(manifest_path(repo), manifest)
+        save(manifest_path(repo), manifest)  # recorded before it exists, never after
+        scaffold(repo, "worktree", "add", "-q", "-b", f"ultra/slice-{n}", str(tree_dir), commit)
         spec = _pathspec_file(s["files"])
         try:
             scaffold(tree_dir, "rm", "-q", "--cached", f"--pathspec-from-file={spec}", "--pathspec-file-nul")
@@ -329,11 +335,15 @@ def build(args) -> None:
     print("or all at once, findings saved: build_slices.py launch --repo <repo> --trust-workspace")
 
 
-def parse_slices(spec: str) -> set[int]:
-    """`1,3,5-7` -> {1, 3, 5, 6, 7}."""
+def parse_slices(spec: str | None) -> set[int] | None:
+    """`1,3,5-7` -> {1, 3, 5, 6, 7}; None (no --slices) means all."""
+    if spec is None:
+        return None
     wanted: set[int] = set()
     for part in spec.split(","):
         low, _, high = part.strip().partition("-")
+        if not low.isdigit() or (high and not high.isdigit()) or int(high or low) < int(low):
+            sys.exit(f"--slices {spec!r}: use numbers and ascending ranges, e.g. 1,3-5")
         wanted.update(range(int(low), int(high or low) + 1))
     return wanted
 
@@ -348,7 +358,7 @@ def launch(args) -> None:
     m = load(manifest_path(repo))
     out = common_dir(repo) / "ultra-findings" / m["build"]
     out.mkdir(parents=True, exist_ok=True)
-    wanted = parse_slices(args.slices) if args.slices else None
+    wanted = parse_slices(args.slices)
     todo = [r for r in m["slices"] if r["head"] and (wanted is None or r["n"] in wanted)
             and (args.rerun or not (out / f"slice-{r['n']}.started").exists())]
     exe = shutil.which("claude") or "claude"
@@ -370,15 +380,24 @@ def launch(args) -> None:
 
     def run(r: dict) -> tuple[int, int]:
         n = r["n"]
-        (out / f"slice-{n}.started").write_bytes(b"")  # before billing: never relaunched silently
-        part = out / f"slice-{n}.json.part"
-        with open(part, "wb") as stdout, open(out / f"slice-{n}.log", "wb") as stderr:
-            code = subprocess.run(argv(r), cwd=r["worktree"], env=env, stdin=subprocess.DEVNULL,
-                                  stdout=stdout, stderr=stderr).returncode
-        if code == 0:
-            part.replace(out / f"slice-{n}.json")
-        else:
-            part.unlink(missing_ok=True)  # the log says why; leave nothing that looks like findings
+        try:  # claimed atomically: a second launch of the same slice backs off
+            os.close(os.open(out / f"slice-{n}.running", os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        except FileExistsError:
+            print(f"slice {n}: another launch is running it; skipped", flush=True)
+            return n, -1
+        try:
+            (out / f"slice-{n}.started").write_bytes(b"")  # before billing: never relaunched silently
+            (out / f"slice-{n}.json").unlink(missing_ok=True)  # a rerun's failure must not leave old findings
+            part = out / f"slice-{n}.json.part"
+            with open(part, "wb") as stdout, open(out / f"slice-{n}.log", "wb") as stderr:
+                code = subprocess.run(argv(r), cwd=r["worktree"], env=env, stdin=subprocess.DEVNULL,
+                                      stdout=stdout, stderr=stderr).returncode
+            if code == 0:
+                part.replace(out / f"slice-{n}.json")
+            else:
+                part.unlink(missing_ok=True)  # the log says why; leave nothing that looks like findings
+        finally:
+            (out / f"slice-{n}.running").unlink(missing_ok=True)
         print(f"slice {n}: exit {code}" + ("" if code == 0 else f", see {out / f'slice-{n}.log'}"),
               flush=True)
         return n, code
@@ -389,20 +408,47 @@ def launch(args) -> None:
     failed = [n for n, code in results if code]
     print(f"\nfindings in {out}" + (f"; failed: {failed} (a failed review may still be running; "
                                       "--rerun bills a new one)" if failed else ""))
+    if failed:
+        sys.exit(1)
+
+
+# A patch git can apply, whatever the user's config: no external diff tool, no
+# textconv, no colour, standard a/ b/ prefixes.
+_RAW_DIFF = ["-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false", "diff", "--binary",
+             "--no-ext-diff", "--no-textconv", "--no-color", "--src-prefix=a/", "--dst-prefix=b/"]
 
 
 def slice_patch(r: dict) -> bytes:
     """Everything --fix left in a slice worktree, as bytes (new files included)."""
     tree_dir = Path(r["worktree"])
     git(tree_dir, "add", "-A", "--intent-to-add")
-    return subprocess.run(["git", "diff", "--binary", r["head"]], cwd=tree_dir,
+    return subprocess.run(["git", *_RAW_DIFF, r["head"]], cwd=tree_dir,
                           capture_output=True, check=True).stdout
 
 
 def touched(r: dict) -> list[str]:
-    out = subprocess.run(["git", "diff", "--name-only", "-z", r["head"]], cwd=Path(r["worktree"]),
-                         capture_output=True, check=True).stdout
+    out = subprocess.run(["git", "diff", "--no-ext-diff", "--name-only", "-z", r["head"]],
+                         cwd=Path(r["worktree"]), capture_output=True, check=True).stdout
     return [p.decode("utf-8", "replace") for p in out.split(b"\0") if p]
+
+
+def settle(r: dict) -> None:
+    """Once a slice's edits are committed on the fixes branch, commit them on its own
+    branch too and move its head there: what it holds afterwards is new work, and its
+    next patch applies on top of what was collected."""
+    tree_dir = Path(r["worktree"])
+    scaffold(tree_dir, "add", "-A")
+    scaffold(tree_dir, "commit", "-q", "--no-verify", "--allow-empty", "-m", "ultra: collected")
+    r["head"] = git(tree_dir, "rev-parse", "HEAD").strip()
+
+
+def fixes_ready(m: dict) -> Path:
+    path, branch = Path(m["fixes"]["path"]), m["fixes"]["branch"]
+    if git(path, "rev-parse", "--abbrev-ref", "HEAD").strip() != branch:
+        sys.exit(f"{path} is no longer on {branch}; refusing to use it")
+    if git(path, "status", "--porcelain").strip():
+        sys.exit(f"{path} has uncommitted changes; commit or discard them, then rerun collect")
+    return path
 
 
 def collect(args) -> None:
@@ -410,15 +456,27 @@ def collect(args) -> None:
     m = load(manifest_path(repo))
     out = common_dir(repo) / "ultra-patches"
     out.mkdir(exist_ok=True)
-    if args.resolved:  # a conflict the user resolved and committed in the fixes worktree
-        for r in m["slices"]:
-            if r["n"] == args.resolved:
-                r["collected"] = hashlib.sha256(slice_patch(r)).hexdigest()
-                save(manifest_path(repo), m)
-                print(f"slice {r['n']}: recorded as collected")
+    held = m.get("conflict")
+    if held:  # a patch that stopped on a conflict: settled only by --resolved, after checks
+        r = next(s for s in m["slices"] if s["n"] == held["n"])
+        if args.resolved != held["n"]:
+            sys.exit(f"slice {held['n']}'s patch stopped on a conflict in {m['fixes']['path']}; "
+                     f"resolve and commit it there, then run collect --resolved {held['n']}")
+        path = fixes_ready(m)
+        if git(path, "rev-parse", "HEAD").strip() == held["fixes_head"]:
+            sys.exit(f"nothing committed in {path} since the conflict; commit the resolution first")
+        if hashlib.sha256(slice_patch(r)).hexdigest() != held["patch"]:
+            sys.exit(f"slice {held['n']}'s worktree changed since its patch was saved; "
+                     "collect the difference by hand, then rerun --resolved")
+        settle(r)
+        m["conflict"] = None
+        save(manifest_path(repo), m)
+        print(f"slice {held['n']}: resolution recorded")
+    elif args.resolved is not None:
+        sys.exit("no conflict is waiting to be resolved")
     pending, by_file = [], {}
     for r in m["slices"]:
-        if not r["head"] or r["collected"]:
+        if not r["head"]:
             continue
         patch = slice_patch(r)
         if patch.strip():
@@ -438,48 +496,61 @@ def collect(args) -> None:
         if path.exists():
             sys.exit(f"{path} exists but this build did not create it; move it, or pass "
                      "another --prefix when building")
+        if git(repo, "rev-parse", "-q", "--verify", f"refs/heads/{args.branch}", check=False).strip():
+            sys.exit(f"branch {args.branch} already exists (an earlier run's fixes?); "
+                     "pass --branch with a new name")
         scaffold(repo, "worktree", "add", "-q", "-b", args.branch, str(path), m["commit"])
         fixes = m["fixes"] = {"path": str(path), "branch": args.branch}
         save(manifest_path(repo), m)
-    path = Path(fixes["path"])
     for r, patch in pending:
-        if git(path, "rev-parse", "--abbrev-ref", "HEAD").strip() != fixes["branch"]:
-            sys.exit(f"{path} is no longer on {fixes['branch']}; refusing to apply there")
-        if git(path, "status", "--porcelain").strip():
-            sys.exit(f"{path} has uncommitted changes; commit or discard them, then rerun collect")
+        path = fixes_ready(m)
         file = out / f"slice-{r['n']}.patch"
         file.write_bytes(patch)
+        before = git(path, "rev-parse", "HEAD").strip()
         result = subprocess.run(["git", "apply", "--3way", "--index", str(file)], cwd=path,
                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode:
+            m["conflict"] = {"n": r["n"], "fixes_head": before,
+                             "patch": hashlib.sha256(patch).hexdigest()}
+            save(manifest_path(repo), m)
             sys.exit(f"slice {r['n']}'s patch did not apply cleanly in {path}:\n{result.stderr}"
-                     f"Resolve it there and commit, then run collect --resolved {r['n']} to "
-                     "record it and apply the rest.")
+                     f"Resolve it there and commit, then run collect --resolved {r['n']}.")
         scaffold(path, "commit", "-q", "--no-verify", "-m", f"ultra slice {r['n']}: review fixes")
-        r["collected"] = hashlib.sha256(patch).hexdigest()  # what was collected, exactly
+        settle(r)  # its edits now live in that commit, byte for byte
         save(manifest_path(repo), m)
         print(f"slice {r['n']}: applied ({file})")
-    print(f"\nfixes on {fixes['branch']} in {path}; verify each finding, test, then open a PR")
+    print(f"\nfixes on {fixes['branch']} in {fixes['path']}; verify each finding, test, then open a PR")
 
 
 def clean(args) -> None:
     repo = toplevel(args.repo)
     m = load(manifest_path(repo))
+    if not args.force:  # check every slice before removing any
+        for r in m["slices"]:
+            tree_dir = Path(r["worktree"])
+            if not tree_dir.exists():
+                continue
+            branch = git(tree_dir, "rev-parse", "--abbrev-ref", "HEAD", check=False).strip()
+            if branch != f"ultra/slice-{r['n']}":
+                sys.exit(f"{tree_dir} is on {branch!r}, not ultra/slice-{r['n']}; not removing it")
+            if not r["head"]:
+                sys.exit(f"slice {r['n']}'s build never finished, so its edits can't be checked; "
+                         f"look at {tree_dir}, then pass --force")
+            if slice_patch(r).strip():
+                sys.exit(f"slice {r['n']} has edits not collected in {tree_dir}; collect, or pass --force")
+    kept = []
     for r in m["slices"]:
         tree_dir = Path(r["worktree"])
         if tree_dir.exists():
-            branch = git(tree_dir, "rev-parse", "--abbrev-ref", "HEAD", check=False).strip()
-            if branch != f"ultra/slice-{r['n']}" and not args.force:
-                sys.exit(f"{tree_dir} is on {branch!r}, not ultra/slice-{r['n']}; not removing it")
-            if r["head"] and not args.force:
-                patch = slice_patch(r)
-                if patch.strip() and hashlib.sha256(patch).hexdigest() != r["collected"]:
-                    sys.exit(f"slice {r['n']} has edits in {tree_dir} that were not collected as "
-                             "they now stand; collect, or pass --force")
             git(repo, "worktree", "remove", "--force", str(tree_dir))
         for name in (f"ultra/slice-{r['n']}", f"ultra/base-{r['n']}"):
-            git(repo, "branch", "-D", name, check=False)
+            exists = git(repo, "rev-parse", "-q", "--verify", f"refs/heads/{name}", check=False).strip()
+            if exists and subprocess.run(["git", *no_hooks(), "branch", "-D", name],
+                                         cwd=repo, capture_output=True).returncode:
+                kept.append(name)
         print(f"slice {r['n']}: removed")
+    if kept:
+        sys.exit(f"could not delete {kept}; the manifest is kept so clean can be rerun")
     manifest_path(repo).unlink()
     print("manifest removed; findings, patches and any fixes worktree are kept")
 
@@ -497,7 +568,15 @@ FINDINGS_FORMAT = (
 SEVERITIES = ("blocker", "should-fix", "nit")
 FINDING_FIELDS = {"severity": str, "file": str, "line": int, "summary": str,
                   "failure_scenario": str, "evidence": str, "verified": bool}
-RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+RUN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+
+
+def check_run(repo: Path, run: str) -> None:
+    """A run name is one simple path component and a valid branch-name part."""
+    ok = RUN_NAME.fullmatch(run) and subprocess.run(
+        ["git", "check-ref-format", f"refs/heads/review/{run}/slice-1"], cwd=repo).returncode == 0
+    if not ok:
+        sys.exit(f"run name {run!r}: letters, digits, '.', '_' and '-', and a valid git branch name part")
 
 
 def parse_findings(text: str, n: int) -> tuple[list[dict], list[str]]:
@@ -555,8 +634,7 @@ def cloud(args) -> None:
         sys.exit(f"{cwd} must be a clean checkout at {commit[:7]}: a cloud session may "
                  "upload it, uncommitted changes included (pass --cwd)")
     run = args.run or datetime.datetime.now(datetime.timezone.utc).strftime("ultra-%Y%m%d-%H%M")
-    if not RUN_NAME.match(run):
-        sys.exit(f"run name {run!r}: letters, digits, '.', '_' and '-' only")
+    check_run(repo, run)
     d = cloud_dir(repo, run)
     slices, _ = plan_slices(repo, plan, commit)
     existing = []
@@ -564,19 +642,25 @@ def cloud(args) -> None:
         earlier = load(d / "run.json")
         if earlier["commit"] != commit:
             sys.exit(f"run {run} reviews {earlier['commit'][:7]}, not {commit[:7]}")
+        if earlier.get("origin") != origin:
+            sys.exit(f"run {run} pushes to {earlier.get('origin')}, but origin is now {origin}")
         existing = earlier["slices"]
         moved = [r["n"] for r in existing if r["n"] > len(slices) or slices[r["n"] - 1]["files"] != r["files"]]
         if moved:
             sys.exit(f"the plan no longer partitions as run {run} did (slices {moved} differ): "
                      "launching more would review some files twice and skip others")
-    wanted = parse_slices(args.slices) if args.slices else None
-    again = sorted({r["n"] for r in existing} & (wanted or set(range(1, len(slices) + 1))))
+    wanted = parse_slices(args.slices)
+    selected = wanted if wanted is not None else set(range(1, len(slices) + 1))
+    beyond = sorted(n for n in selected if n > len(slices))
+    if beyond:
+        sys.exit(f"slices {beyond} don't exist: the plan has {len(slices)}")
+    again = sorted({r["n"] for r in existing} & selected)
     if again:
         sys.exit(f"run {run} already launched slice(s) {again}; choose others with --slices")
     brief = args.brief.read_bytes().decode("utf-8").strip()
     records = []
     for n, s in enumerate(slices, 1):
-        if wanted and n not in wanted:
+        if n not in selected:
             continue
         branch, out = f"review/{run}/slice-{n}", f"research/{run}/slice-{n}.jsonl"
         prompt = (f"{brief}\n\nCommit: {commit}. Review only the files listed between the markers "
@@ -606,13 +690,16 @@ def cloud(args) -> None:
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
     if not flags:
         # --cloud needs a terminal; without a console to give it, hand the user the prompts.
+        import shlex
+
         for r in records:
             (d / f"prompt-slice-{r['n']}.txt").write_bytes(r["prompt"].encode("utf-8"))
             r["status"] = "handed to user"
         save(d / "run.json", state)
         print("\nRun each in a terminal (cloud-fetch then works as usual):")
         for r in records:
-            print(f'  claude --cloud "$(cat \'{d / f"prompt-slice-{r["n"]}.txt"}\')"')
+            prompt_file = shlex.quote(str(d / f"prompt-slice-{r['n']}.txt"))
+            print(f'  (cd {shlex.quote(str(cwd))} && claude --cloud "$(cat {prompt_file})")')
         return
     # Each gets a hidden console of its own, which closes once the session exists;
     # the session then runs in the cloud. Through conhost.exe explicitly, because a
@@ -637,10 +724,12 @@ def cloud_fetch(args) -> None:
     import time
 
     repo = toplevel(args.repo)
-    if not RUN_NAME.match(args.run):
-        sys.exit(f"run name {args.run!r}: letters, digits, '.', '_' and '-' only")
+    check_run(repo, args.run)
     d = cloud_dir(repo, args.run)
     run = load(d / "run.json")
+    origin = git(repo, "remote", "get-url", "origin", check=False).strip()
+    if origin != run.get("origin"):
+        sys.exit(f"run {args.run} pushed to {run.get('origin')}, but origin is now {origin!r}")
 
     def has_findings(r: dict) -> bool:
         return subprocess.run(["git", "cat-file", "-e", f"refs/remotes/origin/{r['branch']}:{r['file']}"],
@@ -718,7 +807,7 @@ def main() -> None:
     c = sub.add_parser("collect")
     c.add_argument("--repo", type=Path, required=True)
     c.add_argument("--branch", default="ultra/fixes")
-    c.add_argument("--resolved", type=int, help="record slice N as collected after resolving its conflict by hand")
+    c.add_argument("--resolved", type=int, help="after resolving slice N's conflict and committing it")
     k = sub.add_parser("clean")
     k.add_argument("--repo", type=Path, required=True)
     k.add_argument("--force", action="store_true")
