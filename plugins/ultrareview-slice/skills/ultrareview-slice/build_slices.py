@@ -18,7 +18,7 @@ in the repo's git dir records each slice as it is built, for the steps after.
 launch: runs `claude ultrareview <base> --json --trust-workspace` in every
 slice worktree at once (the user passes --trust-workspace: it trusts the
 worktrees, which hold this repo's own config and settings). It is billed per
-run: the user runs it, never Claude. Findings go to
+run: the user runs it, never the agent. Findings go to
 <git-common-dir>/ultra-findings/<build>/slice-N.json. A slice launched before
 is skipped, whatever its outcome, unless --rerun: a failed launch may still be
 running, and a retry is billed again.
@@ -328,7 +328,7 @@ def build(args) -> None:
             sys.exit(f"slice {n}'s tree differs from {commit[:7]}")
         if git(tree_dir, "status", "--porcelain").strip():
             sys.exit(f"{tree_dir} is not clean after building")
-    print(f"\nmanifest: {manifest_path(repo)}\nRun each (billed, user-triggered; never launched by Claude):")
+    print(f"\nmanifest: {manifest_path(repo)}\nRun each (billed: the user runs these, never the agent):")
     for r in manifest["slices"]:
         print(f'  cd "{r["worktree"]}"; claude "/code-review ultra --fix --max-findings all {r["base"]}"')
     print("or all at once, findings saved: build_slices.py launch --repo <repo> --trust-workspace")
@@ -349,7 +349,7 @@ def parse_slices(spec: str | None) -> set[int] | None:
 
 def launch(args) -> None:
     """Run `claude ultrareview <base> --json` per slice, in parallel; save each findings
-    payload. Billed: the user starts this, never Claude."""
+    payload. Billed: the user starts this, never the agent."""
     import shutil
     from concurrent.futures import ThreadPoolExecutor
 

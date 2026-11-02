@@ -20,8 +20,15 @@ additions. Both commits are local scaffolding and are never pushed.
 Two scripts: `build_slices.py` partitions the whole codebase into slices, one
 worktree each; `build_slice.py` packs one slice of chosen paths. Prefer the first for
 "the whole codebase"; use the second for a single targeted run. Both sit beside this
-file: `<skill dir>` below is the base directory Claude Code names when it loads this
-skill. They need Python 3.9+ and git 2.31+; nothing else.
+file: `<skill dir>` below is the folder that holds this `SKILL.md` (Claude Code names
+it when it loads the skill). They need Python 3.9+ and git 2.31+; nothing else.
+
+**Any agent can run this skill, and the billing rules bind every agent.** Never run
+`launch` (ultrareview, billed to usage credits) yourself, and never run `cloud`
+(cloud-session credit) without the user's explicit go. In a sandboxed agent such as
+Codex, `build` and `collect` need write access beside the repo (for the worktrees) and
+to its `.git`. `cloud-fetch` needs network access. `launch` and `cloud` need the user's
+logged-in `claude` CLI.
 
 ## Whole codebase (many slices)
 
@@ -63,7 +70,7 @@ skill. They need Python 3.9+ and git 2.31+; nothing else.
    build that failed halfway. It prints one command per slice.
 4. **Hand the user the launch.** Ultrareview bills usage credits (3 free runs per
    account, then roughly $5-25 a review), so state the count and the cost. The user
-   runs it; Claude never does, not even through this script:
+   runs it; the agent never does, not even through this script:
 
    ```
    ! python -I -B <skill dir>/build_slices.py launch --repo <repo> --trust-workspace
@@ -218,7 +225,7 @@ works as usual.
    rebuilds it in place. Use it to change the slice; the base commit id changes each
    time.
 4. **Hand the user the command.** The user runs it; it is billed and user-triggered, and
-   Claude must never launch ultrareview itself:
+   the agent must never launch ultrareview itself:
 
    ```
    cd <worktree>; claude "/code-review ultra --fix --max-findings all <base-commit>"
