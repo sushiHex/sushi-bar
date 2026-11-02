@@ -1,7 +1,7 @@
 {
   "name": "ultrareview-slice",
   "description": "Review a whole codebase with /code-review ultra, past its 500-file / 8,000-line cap: partition the repo into slices (each module with its tests), one worktree per slice, launch them in parallel, and collect the findings or --fix edits onto one branch. Or run the same slices as claude --cloud review sessions on cloud-session credit, with JSONL findings pushed to branches and fetched back.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": { "name": "sushiHex" },
   "license": "MIT",
   "keywords": ["code-review", "ultrareview", "review", "cloud", "worktree", "audit"]
