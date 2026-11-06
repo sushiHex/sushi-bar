@@ -718,7 +718,8 @@ def cloud(args) -> None:
         "substantiated defect; do not stop after the first few. Skip style-only nits "
         "and speculative claims. This overrides any count limit in the brief."
         if args.max_findings == "all" else
-        f"Report at most {args.max_findings} distinct substantiated defects, highest impact first."
+        f"Report at most {args.max_findings} distinct substantiated defects, highest impact "
+        "first. This overrides any other count in the brief."
     )
     for n, s in enumerate(slices, 1):
         if n not in selected:
