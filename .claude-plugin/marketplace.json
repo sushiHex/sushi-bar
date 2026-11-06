@@ -30,7 +30,7 @@
       "name": "ultrareview-slice",
       "source": "./plugins/ultrareview-slice",
       "description": "Review a whole codebase with /code-review ultra past its 500-file / 8,000-line cap: slices with one worktree each, launched in parallel, findings or --fix edits collected onto one branch. Or the same slices as claude --cloud review sessions on cloud credit.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "author": { "name": "sushiHex" }
     }
   ]
