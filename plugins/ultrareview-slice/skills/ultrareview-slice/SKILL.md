@@ -73,8 +73,12 @@ logged-in `claude` CLI.
    runs it; the agent never does, not even through this script:
 
    ```
-   ! python -I -B <skill dir>/build_slices.py launch --repo <repo> --trust-workspace
+   ! python -I -B <skill dir>/build_slices.py launch --repo <repo> --trust-workspace --billing usage-credits
    ```
+
+   `--billing usage-credits` is required: it is the user's acknowledgement that Ultra
+   spends usage credits, which cloud-session credit does not cover. If the user wants
+   cloud-session credit, use the cloud mode below; never fall back from one to the other.
 
    It runs `claude ultrareview <base-N> --json --trust-workspace` in every slice
    worktree at once (`--jobs N` to limit, `--slices 1,3-5` to choose, `--dry-run` to
@@ -134,9 +138,16 @@ One measured example, hardline-mcp in November 2026 with the default cloud model
 for a 1,000-line slice, $4 for a 5,700-line one (about 6 minutes), and about $21 for
 the whole codebase in 7 slices (40,800 lines, all done within about 20 minutes).
 That's roughly $0.50 per 1,000 lines, plus a dollar or two fixed per session. Your
-costs will vary with the model, the brief and the code. Fewer, larger slices are cheaper. Estimate it and tell the
-user before launching. Get their go: it spends
-their credit.
+costs vary with the model, brief and code; this is not a price quote or a spending cap.
+Calibrate with one completed slice and the before/after credit balance, then estimate
+the rest. Don't apply Ultra's $5-25 estimate to cloud sessions, and don't promise to
+use up expiring credit. Fewer, larger slices are cheaper. Tell the user the estimate
+and get their go before launching: it spends their credit.
+
+The launch checks `claude auth status` first and refuses an API-key or third-party
+login (API credit, plan usage and cloud-session credit are different pools). A
+subscription login still doesn't prove the account can create cloud sessions: only the
+first real session does.
 
 1. **Write a brief**: the review instructions every slice gets. The format and the
    push are added by the script, so the brief is only about what to look for. For
@@ -152,6 +163,10 @@ their credit.
    - **Proof:** the repo's install and test commands, and its mutation or probe
      method, so findings are demonstrated, not asserted.
    - Attack, don't validate; skip style; edit nothing but the findings file.
+   - **Finding count:** the script adds `max-findings: all` to every prompt (no count
+     limit). Don't also ask for "a few" findings in the brief. `--max-findings N` caps
+     it instead. It is an instruction to the model, not a `claude` flag, and it can't
+     guarantee an exhaustive review.
 2. **Dry run:** `build_slices.py cloud --repo <repo> --plan <plan> --brief <brief>
    --cwd <clean checkout at the base ref> --dry-run` prints slice 1's full prompt. It
    refuses to go further unless:
